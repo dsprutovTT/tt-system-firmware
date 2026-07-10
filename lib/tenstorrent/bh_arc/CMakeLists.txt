@@ -69,6 +69,7 @@ if(NOT CONFIG_TT_SMC_RECOVERY)
   zephyr_library_sources(
     aiclk_ppm.c
     bh_power.c
+    clock_stretcher.c
     clock_wave.c
     counter.c
     dvfs.c

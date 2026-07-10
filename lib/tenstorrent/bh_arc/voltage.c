@@ -12,6 +12,7 @@
 #include "voltage.h"
 #include "regulator.h"
 #include "dvfs.h"
+#include "clock_stretcher.h"
 
 #define VDD_BOOT            750
 /* Bound checks for VDD_MAX and VDD_MIN (in mV) */
@@ -29,6 +30,14 @@ void VoltageChange(void)
 	if (voltage_arbiter.targ_voltage != voltage_arbiter.curr_voltage) {
 		set_vcore(voltage_arbiter.targ_voltage);
 		voltage_arbiter.curr_voltage = voltage_arbiter.targ_voltage;
+
+		/*
+		 * Re-point the FLL droop detector's nominal RO count to the newly-applied
+		 * rail. This is the single choke point for every VCORE change (DVFS/AICLK,
+		 * thermal, host-forced), so the detector's nominal always tracks the actual
+		 * arbitrated voltage. No-op until the clock stretcher is calibrated.
+		 */
+		clock_stretcher_repoint(voltage_arbiter.targ_voltage);
 	}
 }
 

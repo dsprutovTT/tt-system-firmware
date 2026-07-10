@@ -261,6 +261,19 @@ partitions {
 
 	/* Leave some space for future fixed partitions, if needed. */
 
+	/*
+	 * Clock-stretcher (FLL droop detector) calibration.
+	 *
+	 * Reserved, field-writable region holding the persisted RO-count-vs-VCORE
+	 * fit. No binary-path: the SMC firmware creates the "clkstr" tt-boot-fs file
+	 * here on the first boot (see lib/tenstorrent/bh_arc/clock_stretcher.c) and
+	 * reads it back on subsequent boots to skip characterisation.
+	 */
+	clkstr: partition@400000 {
+		label = "clkstr";
+		reg = <0x400000 DT_SIZE_K(4)>;
+	};
+
 	/* Free space for storage */
 	storage: partition@500000 {
 		label = "storage";

@@ -30,11 +30,12 @@
 #define InitSmbusTarget_PRIO                  107
 #define regulator_init_PRIO                   108
 #define avs_init_PRIO                         109
-#define InitNocTranslationFromHarvesting_PRIO 110
-#define gddr_training_PRIO                    111
-#define CATInit_PRIO                          112
-#define publish_runtime_telemetry_PRIO        113
-#define bh_arc_init_end_PRIO                  114
+#define clock_stretcher_init_PRIO             110
+#define InitNocTranslationFromHarvesting_PRIO 111
+#define gddr_training_PRIO                    112
+#define CATInit_PRIO                          113
+#define publish_runtime_telemetry_PRIO        114
+#define bh_arc_init_end_PRIO                  115
 
 #define SYS_INIT_APP(func) SYS_INIT(func, POST_KERNEL, func##_PRIO)
 
