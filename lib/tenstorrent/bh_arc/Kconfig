@@ -19,7 +19,7 @@ if TT_BH_ARC
 
 config TT_BH_ARC_NUM_MSG_CODES
 	int "Number of message codes"
-	default 200
+	default 202
 	help
 	  The number of message codes
 
@@ -84,6 +84,16 @@ config TT_BH_ARC_DMFW_PING_TIMEOUT
 	help
 	  Timeout for DMFW ping in milliseconds. If the DMFW does not respond within this time,
 	  the ping will be considered failed.
+
+config TT_BH_ARC_CLOCK_STRETCHER
+	bool "Enable FLL clock-stretcher (droop detector) boot calibration"
+	default n
+	help
+	  Calibrate and enable the FLL droop detector at boot. On the first boot the
+	  RO-count vs VCORE line is characterised by a short VCORE sweep and the fit is
+	  persisted to the "clkstr" SPIROM partition; subsequent boots load the fit and
+	  skip the sweep. Requires the clkstr fixed-partition to be present in the board
+	  devicetree.
 
 module = BH_ARC
 module-str = bh_arc

@@ -50,10 +50,10 @@
 #define OPERATION_DATA_BYTE_SIZE       1
 #define PMBUS_CMD_BYTE_SIZE            1
 #define PMBUS_FLIP_BYTES               0
-#define CSM_DUMP_START_ADDR 0x10030000
-#define CSM_DUMP_END_ADDR   0x1007FFFF
-#define CSM_DUMP_SIZE       (CSM_DUMP_END_ADDR - CSM_DUMP_START_ADDR + 1)  // 327,680 bytes
-#define MAX_SAMPLES         (CSM_DUMP_SIZE / sizeof(uint16_t))             // 163,840 samples
+#define CSM_DUMP_START_ADDR 0x10046000
+#define CSM_DUMP_END_ADDR   0x1007EFFF
+#define CSM_DUMP_SIZE       (CSM_DUMP_END_ADDR - CSM_DUMP_START_ADDR + 1)
+#define MAX_SAMPLES         (CSM_DUMP_SIZE / sizeof(uint16_t))
 
 /* VR feedback resistors */
 #define GDDR_VDDR_FB1         0.422

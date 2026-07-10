@@ -100,21 +100,22 @@ float VFCurve(float freq_mhz)
 		return voltage_mv + voltage_margin_mv;
 	}
 
-	float voltage_margin;
-
+	float voltage_margin = 20.0F;
+	/*
 	if (process_is_ss) {
 		voltage_margin = SS_MARGIN_MV;
 	} else {
 		voltage_margin = (freq_mhz >= FREQ_THRESHOLD_MHZ) ? FF_HIGH_FREQ_MARGIN_MV
 								  : FF_LOW_FREQ_MARGIN_MV;
 	}
+	*/
 
 	float freq_n = (freq_mhz - FREQ_NORM_MEAN) / FREQ_NORM_STD;
 
 	float voltage_mv =
 		vf_ro_base + vf_freq_linear * freq_n + VF_COEFF_FREQ_SQ * freq_n * freq_n;
 
-	return voltage_mv + voltage_margin;
+	return voltage_mv; //- voltage_margin;
 }
 
 static uint8_t get_voltage_curve_from_freq_handler(const union request *request,

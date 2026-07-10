@@ -9,6 +9,7 @@ zephyr_library_sources_ifndef(
 # zephyr-keep-sorted-start
   aiclk_ppm.c
   bh_power.c
+  clock_stretcher.c
   clock_wave.c
   counter.c
   dvfs.c

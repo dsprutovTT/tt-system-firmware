@@ -160,6 +160,33 @@ static int SpiSmartWrite(uint32_t address, const uint8_t *data, uint32_t num_byt
 	return 0;
 }
 
+/*
+ * tt-boot-fs HAL callbacks. These wrap the SPI helpers into the (addr, size, buf)
+ * signature tt_boot_fs expects and are registered with the boot_fs_data mount in
+ * InitSpiFS so in-firmware consumers (e.g. the clock stretcher) can read/append
+ * boot_fs files. Note the host-facing flash_locked guard is deliberately not applied
+ * here: it gates the external TT_SMC_MSG_WRITE_EEPROM path, not trusted in-firmware
+ * writes.
+ */
+static int spi_hal_read(uint32_t addr, uint32_t size, uint8_t *dst)
+{
+	return SpiBlockRead(addr, size, dst);
+}
+
+static int spi_hal_write(uint32_t addr, uint32_t size, const uint8_t *src)
+{
+	return SpiSmartWrite(addr, src, size);
+}
+
+static int spi_hal_erase(uint32_t addr, uint32_t size)
+{
+	if (!device_is_ready(flash)) {
+		return -ENODEV;
+	}
+
+	return flash_erase(flash, addr, size);
+}
+
 /* If we are using the spi buffer memory type, */
 /* then make sure the passed in address and length is actually within the spi_buffer bounds. */
 static bool check_csm_region(uint32_t addr, uint32_t num_bytes)
@@ -253,6 +280,9 @@ static int InitSpiFS(void)
 	}
 
 	EepromSetup();
+
+	/* Mount the boot filesystem so in-firmware consumers can read/append files. */
+	tt_boot_fs_mount(&boot_fs_data, spi_hal_read, spi_hal_write, spi_hal_erase);
 
 	return 0;
 }

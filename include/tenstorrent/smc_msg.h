@@ -159,6 +159,10 @@ enum tt_smc_msg {
 	TT_SMC_MSG_GET_CURRENT_DUMP = 0xC6,
 	/** @brief Get AICLK dump request */
 	TT_SMC_MSG_GET_AICLK_DUMP = 0xC7,
+	/** @brief Get clock-stretcher (FLL droop detector) calibration fit request */
+	TT_SMC_MSG_GET_CLK_STRETCHER_FIT = 0xC8,
+	/** @brief Force clock-stretcher recalibration (re-sweep) request */
+	TT_SMC_MSG_RECALIBRATE_CLK_STRETCHER = 0xC9,
 };
 
 /** @} */

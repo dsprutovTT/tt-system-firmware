@@ -92,10 +92,22 @@ K_THREAD_DEFINE(aiclk_dump_thread, 4096, aiclk_dump_thread_fn, NULL, NULL, NULL,
 #define AICLK_FMIN_MAX 800.0F
 #define AICLK_FMIN_MIN 200.0F
 
-#define CSM_DUMP_START_ADDR 0x10030000
-#define CSM_DUMP_END_ADDR   0x1007FFFF
-#define CSM_DUMP_SIZE       (CSM_DUMP_END_ADDR - CSM_DUMP_START_ADDR + 1)  // 327,680 bytes
-#define MAX_SAMPLES         (CSM_DUMP_SIZE / sizeof(uint32_t))             // 81,920 samples
+/* The AICLK sample dump buffer occupies the tail of the linked SRAM/CSM that
+ * sits above the firmware image. Its start tracks the linker symbol _end (the
+ * top of the firmware's writable data) so the buffer can never overlap
+ * .bss/noinit/stack no matter how large the image grows; the end is the top of
+ * the linked SRAM region. Because the base is now build-dependent, the host
+ * locates this buffer by reading the _end symbol from the firmware ELF.
+ * NOTE: assumes no runtime heap grows above _end (CONFIG_HEAP_MEM_POOL_SIZE=0);
+ * revisit if a newlib/sbrk heap is ever enabled.
+ */
+extern char _end[];
+#define CSM_DUMP_ALIGN          64U
+#define CSM_DUMP_START_ADDR     ROUND_UP((uintptr_t)_end, CSM_DUMP_ALIGN)
+#define CSM_DUMP_END_ADDR       0x1007EFFFU
+#define CSM_DUMP_SIZE           (CSM_DUMP_END_ADDR - CSM_DUMP_START_ADDR + 1U)
+#define MAX_SAMPLES             (CSM_DUMP_SIZE / sizeof(uint16_t))
+#define PLL0_CLK_COUNTER_0_ADDR 0x80020134U
 
 /* aiclk control mode */
 typedef enum {
@@ -601,7 +613,7 @@ static uint32_t GetAiclkDump(uint32_t sample_delay_us, uint32_t num_samples,
 			     uint32_t *avg_curr, uint32_t *avg_targ)
 {
 	/* Pointer to CSM memory where we'll store packed AICLK values */
-	volatile uint32_t * const csm_addr = (volatile uint32_t *)CSM_DUMP_START_ADDR;
+	volatile uint16_t * const csm_addr = (volatile uint16_t *)CSM_DUMP_START_ADDR;
 	uint64_t sum_curr = 0;
 	uint64_t sum_targ = 0;
 	uint32_t stored_count = 0;
@@ -616,20 +628,15 @@ static uint32_t GetAiclkDump(uint32_t sample_delay_us, uint32_t num_samples,
 	uint64_t start_cycles = k_cycle_get_64();
 
 	for (uint32_t i = 0; i < num_samples; i++) {
-		/* Read current AICLK frequency - stores actual running frequency */
-		uint32_t curr_freq_mhz;
+		uint16_t raw_count = (uint16_t)ReadReg(PLL0_CLK_COUNTER_0_ADDR);
+		uint32_t curr_freq_mhz = raw_count * 50U / 1000U;
 		uint32_t targ_freq_mhz = aiclk_ppm.targ_freq;
-		clock_control_get_rate(pll_dev_0,
-		                       (clock_control_subsys_t)CLOCK_CONTROL_TT_BH_CLOCK_AICLK,
-		                       &curr_freq_mhz);
 
 		sum_curr += curr_freq_mhz;
 		sum_targ += targ_freq_mhz;
 
 		if ((i % store_stride) == 0 && stored_count < MAX_SAMPLES) {
-			/* Pack targ (upper 16) and curr (lower 16) MHz values */
-			*(csm_addr + stored_count) = ((targ_freq_mhz & 0xFFFF) << 16) |
-						     (curr_freq_mhz & 0xFFFF);
+			*(csm_addr + stored_count) = raw_count;
 			stored_count++;
 		}
 
