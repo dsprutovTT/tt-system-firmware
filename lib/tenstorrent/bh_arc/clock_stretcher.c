@@ -198,20 +198,6 @@ typedef union {
 static const uint32_t kSweepVcoreMv[] = {700, 725, 750, 775, 800};
 #define SWEEP_POINTS ARRAY_SIZE(kSweepVcoreMv)
 
-/*
- * Package/loadline offset (mV). The regulator + package add a fixed ~10-15 mV on
- * top of whatever VCORE the FW programs (package-loss + loadline compensation built
- * in by the package team), so the voltage the die actually sees is higher than the
- * set value. The RO count is a function of that ACTUAL die voltage, so the fit is
- * built and evaluated against (programmed VCORE + this offset). set_vcore() is never
- * given the offset -- it still programs the raw value; the offset is applied only
- * where a programmed voltage is used as the fit's independent variable (the sweep
- * points in characterize() and count_for_vcore() at runtime). Applied consistently in
- * both, it shifts only the stored intercept b (by ~offset*m); the slope m and the
- * programmed nominal are unchanged, so the stretching behaviour is preserved.
- */
-#define VCORE_PACKAGE_OFFSET_MV 20
-
 /* Number of FLL_STATUS_0 reads to discard / average per sweep point. */
 #define RO_DISCARD_SAMPLES 10
 #define RO_AVG_SAMPLES     32
@@ -298,7 +284,7 @@ static void apply_static_config(void)
 	/* Droop / droop2 thresholds. */
 	FLL_CNTL_1_reg_u cntl1 = {.val = ReadReg(FLL_CNTL_1_REG_ADDR)};
 
-	cntl1.f.droop_threshold = 15;
+	cntl1.f.droop_threshold = 17;
 	cntl1.f.droop2_threshold = 100;
 	WriteReg(FLL_CNTL_1_REG_ADDR, cntl1.val);
 
@@ -460,7 +446,6 @@ static struct fll_fit linear_fit(const uint32_t *x, const uint32_t *y, size_t n)
 static struct fll_fit characterize(void)
 {
 	uint32_t ro[SWEEP_POINTS];
-	uint32_t vfit[SWEEP_POINTS];
 	uint32_t saved_vcore = get_vcore();
 
 	for (size_t i = 0; i < SWEEP_POINTS; i++) {
@@ -468,20 +453,13 @@ static struct fll_fit characterize(void)
 		WaitUs(VCORE_SETTLE_US);
 		sample_nominal_vdd(); /* re-latch nominal at this voltage before reading */
 		ro[i] = read_ro_count();
-		/*
-		 * Fit against the ACTUAL die voltage, not the programmed value:
-		 * set_vcore() above gets the raw sweep point, but the die sits
-		 * VCORE_PACKAGE_OFFSET_MV higher, so that is the x the RO count maps to.
-		 */
-		vfit[i] = kSweepVcoreMv[i] + VCORE_PACKAGE_OFFSET_MV;
-		LOG_DBG("sweep vcore=%u mV (die~%u mV) -> ro=%u", kSweepVcoreMv[i], vfit[i],
-			ro[i]);
+		LOG_DBG("sweep vcore=%u mV -> ro=%u", kSweepVcoreMv[i], ro[i]);
 	}
 
 	set_vcore(saved_vcore);
 	WaitUs(VCORE_SETTLE_US);
 
-	return linear_fit(vfit, ro, SWEEP_POINTS);
+	return linear_fit(kSweepVcoreMv, ro, SWEEP_POINTS);
 }
 
 /*
@@ -490,15 +468,7 @@ static struct fll_fit characterize(void)
  */
 static uint16_t count_for_vcore(uint32_t vcore_mv)
 {
-	/*
-	 * The fit's independent variable is the actual die voltage, so convert the
-	 * programmed VCORE to the die voltage (+ VCORE_PACKAGE_OFFSET_MV) before
-	 * evaluating -- mirroring the offset applied to the sweep points in
-	 * characterize(). Keeping both in the same domain leaves the programmed
-	 * nominal (and thus the stretching behaviour) identical to a raw-voltage fit.
-	 */
-	float die_mv = (float)(vcore_mv + VCORE_PACKAGE_OFFSET_MV);
-	float count_f = (clock_stretcher_fit.m * die_mv) + clock_stretcher_fit.b;
+	float count_f = (clock_stretcher_fit.m * (float)vcore_mv) + clock_stretcher_fit.b;
 
 	if (count_f < 0.0f) {
 		count_f = 0.0f;
