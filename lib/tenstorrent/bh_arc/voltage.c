@@ -27,10 +27,7 @@ void VoltageChange(void)
 		voltage_arbiter.curr_voltage = voltage_arbiter.targ_voltage;
 
 		/*
-		 * Re-point the FLL droop detector's nominal RO count to the newly-applied
-		 * rail. This is the single choke point for every VCORE change (DVFS/AICLK,
-		 * thermal, host-forced), so the detector's nominal always tracks the actual
-		 * arbitrated voltage. No-op until the clock stretcher is calibrated.
+		 * Re-point the FLL droop detector's nominal RO count
 		 */
 		clock_stretcher_repoint(voltage_arbiter.targ_voltage);
 	}
