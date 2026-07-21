@@ -99,8 +99,8 @@ float VFCurve(float freq_mhz)
 	}
 
 	float voltage_margin;
-
-	/* Process-based margin is FW-table base voltage margin plus process/frequency delta. */
+	/*
+	// Process-based margin is FW-table base voltage margin plus process/frequency delta.
 	if (process_is_ss) {
 		voltage_margin = fw_table_voltage_margin_mv + SS_MARGIN_MV;
 	} else {
@@ -108,13 +108,13 @@ float VFCurve(float freq_mhz)
 					 ? fw_table_voltage_margin_mv + FF_HIGH_FREQ_MARGIN_MV
 					 : fw_table_voltage_margin_mv + FF_LOW_FREQ_MARGIN_MV;
 	}
-
+	*/
 	float freq_n = (freq_mhz - FREQ_NORM_MEAN) / FREQ_NORM_STD;
 
 	float voltage_mv =
 		vf_ro_base + vf_freq_linear * freq_n + VF_COEFF_FREQ_SQ * freq_n * freq_n;
 
-	return voltage_mv + voltage_margin;
+	return voltage_mv;// + voltage_margin;
 }
 
 static uint8_t get_voltage_curve_from_freq_handler(const union request *request,
