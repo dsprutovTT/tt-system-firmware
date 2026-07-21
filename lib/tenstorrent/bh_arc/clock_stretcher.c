@@ -10,35 +10,11 @@
  * The FLL sits in the pll_cntl_wrapper block (base 0x80020000, shared with the
  * PLLs configured in pll.c). A free-running ring-oscillator (RO) chain drives a
  * counter whose value tracks the core voltage (VCORE): every dd_counter_period+1
- * cycles of the selected dd_clk_sel clock the counter snapshots its value, and two
- * consecutive snapshots are compared. If the drop between them exceeds
- * droop_threshold, the droop-detected signal fires and the hardware subtracts
- * droop_fbdiv_adj from the PLL feedback divider, stretching (slowing) the clock
- * until the rail recovers.
- *
- * This routine:
- *   1. Applies the static droop-detector configuration (see config.yaml). This is
- *      volatile and re-applied every boot.
- *   2. Loads the RO-count-vs-VCORE fit from SPIROM if one was persisted on a prior
- *      boot. If present, it re-points the detector for the boot VCORE and returns --
- *      the sweep (the only slow step) is skipped.
- *   3. Otherwise (first boot / corrupt blob) it sweeps VCORE across a few points,
- *      reads the RO count from FLL_STATUS_0 at each, fits a line count = m*vcore + b,
- *      enables the detector, and persists the fit (m, b) to SPIROM.
- *
- * Only the fit is persisted -- not a per-voltage table -- so first-boot latency is a
- * few-point sweep, not a sweep of every operating voltage. At runtime the DVFS path
- * calls clock_stretcher_repoint() (see clock_stretcher.h) to recompute the detector's
- * nominal RO count from the stored fit on each VCORE change, without re-sweeping.
- *
- * NOTE: this is a scaffold. Search for "TODO" for the hardware-specific values and
- * decisions that still need to be filled in / validated on silicon.
- *
- * Ordering: registered via SYS_INIT_APP, so it must be given a priority in
- * include/tenstorrent/sys_init_defines.h that runs AFTER regulator_init (108) and
- * avs_init (109) -- set_vcore() is unavailable before those -- and after PLLInit
- * (97) so the wrapper clocks are up. See the accompanying notes for wiring into
- * sys_init_defines.h, CMakeLists.txt, and Kconfig.
+ * cycles of the selected dd_clk_sel clock the counter snapshots its value, and each
+ * snapshot is compared against a held nominal RO count. If the snapshot falls
+ * below the nominal by more than droop_threshold, the droop-detected signal fires
+ * and the hardware subtracts droop_fbdiv_adj from the PLL feedback divider,
+ * stretching (slowing) the clock until the rail recovers.
  */
 
 #include "clock_stretcher.h"
@@ -188,12 +164,7 @@ typedef union {
 } FLL_CNTL_9_reg_u;
 
 /*
- * VCORE sweep points (mV) used to characterise the RO-count vs voltage line.
- *
- * TODO: pick safe, representative points. They must stay within the regulator's
- * legal VCORE window (voltage.c enforces 0.55 V <= VCORE <= 0.95 V via VCOREM),
- * and the detector must be DISABLED while sweeping so stretching does not perturb
- * the measurement.
+ * VCORE sweep points (mV) used to characterise the RO-count vs voltage.
  */
 static const uint32_t kSweepVcoreMv[] = {700, 725, 750, 775, 800};
 #define SWEEP_POINTS ARRAY_SIZE(kSweepVcoreMv)
@@ -202,8 +173,7 @@ static const uint32_t kSweepVcoreMv[] = {700, 725, 750, 775, 800};
 #define RO_DISCARD_SAMPLES 10
 #define RO_AVG_SAMPLES     32
 
-/* Settle time after a VCORE change before sampling the RO counter (us). */
-/* TODO: confirm against regulator slew (set_vcore already waits ~250us). */
+/* Settle time after a VCORE change before sampling the RO counter. */
 #define VCORE_SETTLE_US 500
 
 /* Result of the linear fit: ro_count = m * vcore_mv + b. */
@@ -255,15 +225,6 @@ static const uint8_t kFllCalTag[TT_BOOT_FS_IMAGE_TAG_SIZE] = {'c', 'l', 'k', 's'
 
 /*
  * Apply the static droop-detector configuration.
- *
- * Values mirror the reference config.yaml
- * (t6py/.../tensix_sm/pll_cntl_wrapper/config.yaml). Keep the two in sync, or
- * better: source these from the SPI fw_table so they are tunable without a
- * firmware rebuild. The detector is ENABLED here (dd_enable = 1) with the
- * auto-sampled nominal source -- the RO counter and debug buffer only run while
- * the detector is enabled (see the FLL_CNTL_3 block). count-vs-VCORE
- * characterisation happens against the auto nominal; clock_stretcher_repoint()
- * then switches to the fitted FW nominal (dd_use_fw_nominal_vdd = 1).
  */
 static void apply_static_config(void)
 {
@@ -284,7 +245,7 @@ static void apply_static_config(void)
 	/* Droop / droop2 thresholds. */
 	FLL_CNTL_1_reg_u cntl1 = {.val = ReadReg(FLL_CNTL_1_REG_ADDR)};
 
-	cntl1.f.droop_threshold = 17;
+	cntl1.f.droop_threshold = 18;
 	cntl1.f.droop2_threshold = 100;
 	WriteReg(FLL_CNTL_1_REG_ADDR, cntl1.val);
 
@@ -293,18 +254,10 @@ static void apply_static_config(void)
 
 	cntl2.f.dd_counter_period = 9;     /* 1 ddclk period */
 	cntl2.f.dd_filt_sample_period = 0; /* filtering disabled */
-	cntl2.f.droop_time = 2000;         /* in units of ddclk period */
+	cntl2.f.droop_time = 1500;         /* in units of ddclk period */
 	WriteReg(FLL_CNTL_2_REG_ADDR, cntl2.val);
 
 	/* Nominal-VDD source, oscillator enable, fbdiv adjust, debug buffer.
-	 *
-	 * dd_enable MUST be 1 here: per the RTL (tt_dd.v), the ddclk RO counter
-	 * (roclk_count_ddclk -> o_ddclk_counter) and the sample pulse that pushes
-	 * it into the debug buffer (ddclk_counter_sample, the buffer's i_data_valid)
-	 * are BOTH held in reset while dd_en == 0. With the detector disabled the
-	 * FIFO is never written, so every FLL_STATUS_0 read returns 0 (empty read,
-	 * ones_on_empty_mode = 0) and the sweep fits a degenerate m = b = 0 line.
-	 * The reference config.yaml enables the detector for exactly this reason.
 	 *
 	 * During the sweep we use the auto-sampled nominal (dd_use_nominal_vdd = 1,
 	 * dd_use_fw_nominal_vdd = 0) and re-latch it at each point (see
@@ -349,12 +302,7 @@ static void apply_static_config(void)
 	cntl9.f.droop2_postdiv_adj = 0;
 	cntl9.f.manual_droop = 0;
 	/*
-	 * debug_data_mode = 0 (debug_counter): stream the FULL 16-bit RO count,
-	 * two per 32-bit FIFO word. Mode 1 (debug_fast_counter, per tt_dd /
-	 * tt_pll_cntl_wrapper) streams only ddclk_counter[7:0] -- a higher sample
-	 * rate but truncated to 8 bits, which aliases every 256 counts and cannot
-	 * represent the ~thousands-of-counts values this sweep fits. Must stay 0
-	 * to match read_ro_count()'s two-16-bit unpack.
+	 * debug_data_mode = 0 (debug_counter): stream the FULL 16-bit RO count, two per 32-bit FIFO word.
 	 */
 	cntl9.f.debug_data_mode = 0;
 	WriteReg(FLL_CNTL_9_REG_ADDR, cntl9.val);
@@ -363,12 +311,7 @@ static void apply_static_config(void)
 /*
  * Read the RO counter from FLL_STATUS_0 and return an averaged count.
  *
- * FLL_STATUS_0 packs the debug buffer. apply_static_config() selects
- * debug_data_mode = 0 (the full-width counter), in which each 32-bit word carries
- * two consecutive 16-bit RO counts (mirrors get_ro.py); both halves are averaged
- * here. The first few reads are discarded to flush stale/invalid snapshots.
- *
- * This unpack is only valid for debug_data_mode = 0. If the static config ever
+ * This unpack is only valid for debug_data_mode = 0 (16-bit). If the static config ever
  * selects mode 1/2/3 (8/4/1-bit packing) this must change to match.
  */
 static uint32_t read_ro_count(void)
@@ -393,10 +336,8 @@ static uint32_t read_ro_count(void)
 
 /*
  * Re-latch the auto-sampled nominal RO count to the current operating point by
- * pulsing FLL_CNTL_3.dd_force_sample_nominal_vdd 0->1->0 (mirrors the reference
- * dump_debug_buffer.py). Used between sweep points: with the nominal re-captured
- * at each voltage, roclk_cnt_delta stays ~0 so no spurious droop fires and clock
- * stretching cannot perturb the RO count we are about to read.
+ * pulsing FLL_CNTL_3.dd_force_sample_nominal_vdd.
+ * Used between sweep points: with the nominal re-captured at each voltage
  */
 static void sample_nominal_vdd(void)
 {
@@ -441,7 +382,6 @@ static struct fll_fit linear_fit(const uint32_t *x, const uint32_t *y, size_t n)
 
 /*
  * Sweep VCORE, sample the RO counter at each point, and fit the line.
- * Restores the original VCORE before returning.
  */
 static struct fll_fit characterize(void)
 {
@@ -464,7 +404,6 @@ static struct fll_fit characterize(void)
 
 /*
  * Evaluate the fitted line at vcore_mv and clamp to the 16-bit register range.
- * Pure function of the current fit -- no register side effects.
  */
 static uint16_t count_for_vcore(uint32_t vcore_mv)
 {
@@ -482,24 +421,13 @@ static uint16_t count_for_vcore(uint32_t vcore_mv)
 /*
  * Re-point the detector's nominal RO count to the given operating voltage from the
  * fitted line, and (on the first call) enable the detector. Callable at runtime from
- * the DVFS path on each VCORE change -- it recomputes dd_fw_nominal_vdd from the
- * stored fit, so no re-sweep (which would risk a real droop mid-characterisation) is
- * needed.
- *
- * dd_fw_nominal_vdd is consumed by the detector continuously, so writing FLL_CNTL_5
- * takes effect immediately -- there is no need to disable/re-enable to latch it. In
- * steady state only the nominal register changes; FLL_CNTL_3 is written only to
- * perform the one-time 0->1 enable (and to select the FW nominal source), never
- * toggled off, so the detector is never disarmed.
+ * the DVFS path on each VCORE change -- it recomputes dd_fw_nominal_vdd from the stored fit.
  */
 void clock_stretcher_repoint(uint32_t vcore_mv)
 {
 	/*
 	 * Safe to call from the generic voltage-change choke point (VoltageChange()):
-	 * no-op until a valid fit exists. Without this guard a call before/without
-	 * calibration would program dd_fw_nominal_vdd = 0 and arm the detector against a
-	 * zero nominal. clock_stretcher_fit_valid is false when the feature is compiled
-	 * out (clock_stretcher_init() returns early) or before characterisation completes.
+	 * no-op until a valid fit exists.
 	 */
 	if (!IS_ENABLED(CONFIG_TT_BH_ARC_CLOCK_STRETCHER) || !clock_stretcher_fit_valid) {
 		return;
@@ -515,14 +443,7 @@ void clock_stretcher_repoint(uint32_t vcore_mv)
 	FLL_CNTL_3_reg_u cntl3 = {.val = ReadReg(FLL_CNTL_3_REG_ADDR)};
 
 	/*
-	 * dd_use_nominal_vdd MUST be cleared here. Per tt_dd.v:230-236 the nominal
-	 * select checks i_use_nominal_vdd BEFORE i_use_fw_nominal_vdd: while
-	 * dd_use_nominal_vdd = 1 the detector holds the auto-sampled nominal and
-	 * IGNORES dd_fw_nominal_vdd entirely. apply_static_config() leaves it 1 for
-	 * the sweep, so arming the FW nominal requires clearing it -- otherwise the
-	 * fitted nominal is dead code and the detector compares against whatever
-	 * voltage was auto-sampled last (the final sweep point), causing a constant
-	 * stretch.
+	 * arm fw_nominal_vdd to use the linear-fit nominal RO count
 	 */
 	if (cntl3.f.dd_use_fw_nominal_vdd != 1 || cntl3.f.dd_use_nominal_vdd != 0 ||
 	    cntl3.f.dd_enable != 1) {
@@ -591,10 +512,6 @@ static int32_t round_to_i32(float x)
  * Persist the fit to the reserved "clkstr" SPIROM partition as a new tt-boot-fs
  * file. Called exactly once in the device's life (only when no valid blob was
  * loaded), so the flash sector is not re-written on subsequent boots.
- *
- * TODO: this appends an FD; if a prior blob exists but is corrupt, a second FD with
- * the same tag is created and the stale one is found first. Harmless for the normal
- * first-boot-then-persist lifecycle, but a delete/replace path would be cleaner.
  */
 static int save_fit_to_spirom(const struct fll_fit *fit)
 {
@@ -628,7 +545,6 @@ static int clock_stretcher_init(void)
 		return 0;
 	}
 
-	/* TODO: use the actual boot VCORE target rather than the current readback. */
 	uint32_t boot_vcore = get_vcore();
 
 	/*
