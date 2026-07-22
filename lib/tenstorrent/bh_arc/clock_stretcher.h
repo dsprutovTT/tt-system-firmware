@@ -14,9 +14,8 @@
  *        point using the calibrated fit
  *
  * Recomputes dd_fw_nominal_vdd from the stored RO-count-vs-VCORE fit and writes it;
- * the detector consumes the value immediately. Intended to be called from the DVFS path on each
- * VCORE change so the detector tracks the operating voltage without re-running the
- * boot-time characterisation sweep. Has a no-op guard for the case where the fit is invalid/unavailable
+ * Intended to be called from the DVFS path on each VCORE change so the detector tracks the operating voltage. 
+ * Has a no-op guard for the case where the fit is invalid/unavailable
  *
  * @param vcore_mv Target core voltage in millivolts.
  */

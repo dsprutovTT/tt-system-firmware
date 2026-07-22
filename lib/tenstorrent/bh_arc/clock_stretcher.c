@@ -190,16 +190,6 @@ static bool clock_stretcher_fit_valid;
 /*
  * SPIROM persistence.
  *
- * The characterisation sweep is the only slow part of this routine, so its result
- * (the fit, NOT a per-voltage table) is persisted to SPIROM. On every boot after
- * the first we load the fit and skip the sweep entirely; DVFS re-points the
- * detector from the fit on each VCORE change via clock_stretcher_repoint().
- *
- * The blob lives in the reserved "clkstr" tt-boot-fs partition (see
- * boards/.../tt_blackhole_fixed_partitions.dtsi). It is discovered by tag using the
- * device-based boot_fs scan (not the 16-entry mount cache, which cannot hold every
- * FD on this flash) and created once, on the first boot, via tt_boot_fs_add_file().
- *
  * m and b are stored as scaled integers (milli-units) so the on-flash format is
  * deterministic and independent of the host/target float ABI.
  */
@@ -217,7 +207,7 @@ struct fll_cal_blob {
 BUILD_ASSERT(sizeof(struct fll_cal_blob) == 20, "fll_cal_blob must be 4-byte-aligned/sized");
 BUILD_ASSERT(offsetof(struct fll_cal_blob, crc) % 4 == 0, "crc coverage must be word-aligned");
 
-/* tt-boot-fs tag (== the "clkstr" partition label), zero-padded to the tag size. */
+/* tt-boot-fs tag, zero-padded to the tag size. */
 static const uint8_t kFllCalTag[TT_BOOT_FS_IMAGE_TAG_SIZE] = {'c', 'l', 'k', 's', 't', 'r'};
 
 /* Absolute SPI address of the reserved calibration partition's data region. */
@@ -253,16 +243,11 @@ static void apply_static_config(void)
 	FLL_CNTL_2_reg_u cntl2 = {.val = ReadReg(FLL_CNTL_2_REG_ADDR)};
 
 	cntl2.f.dd_counter_period = 9;     /* 1 ddclk period */
-	cntl2.f.dd_filt_sample_period = 0; /* filtering disabled */
+	cntl2.f.dd_filt_sample_period = 0; 
 	cntl2.f.droop_time = 1500;         /* in units of ddclk period */
 	WriteReg(FLL_CNTL_2_REG_ADDR, cntl2.val);
 
-	/* Nominal-VDD source, oscillator enable, fbdiv adjust, debug buffer.
-	 *
-	 * During the sweep we use the auto-sampled nominal (dd_use_nominal_vdd = 1,
-	 * dd_use_fw_nominal_vdd = 0) and re-latch it at each point (see
-	 * sample_nominal_vdd()) so stretching cannot bias the reads.
-	 */
+	/* Nominal-VDD source, oscillator enable, fbdiv adjust, debug buffer. */
 	FLL_CNTL_3_reg_u cntl3 = {.val = ReadReg(FLL_CNTL_3_REG_ADDR)};
 
 	cntl3.f.roclk_bypass = 1;
@@ -301,9 +286,7 @@ static void apply_static_config(void)
 
 	cntl9.f.droop2_postdiv_adj = 0;
 	cntl9.f.manual_droop = 0;
-	/*
-	 * debug_data_mode = 0 (debug_counter): stream the FULL 16-bit RO count, two per 32-bit FIFO word.
-	 */
+	/* debug_data_mode = 0 (debug_counter): stream the FULL 16-bit RO count, two per 32-bit FIFO word. */
 	cntl9.f.debug_data_mode = 0;
 	WriteReg(FLL_CNTL_9_REG_ADDR, cntl9.val);
 }
@@ -336,8 +319,7 @@ static uint32_t read_ro_count(void)
 
 /*
  * Re-latch the auto-sampled nominal RO count to the current operating point by
- * pulsing FLL_CNTL_3.dd_force_sample_nominal_vdd.
- * Used between sweep points: with the nominal re-captured at each voltage
+ * pulsing FLL_CNTL_3.dd_force_sample_nominal_vdd
  */
 static void sample_nominal_vdd(void)
 {
@@ -350,9 +332,7 @@ static void sample_nominal_vdd(void)
 	WriteReg(FLL_CNTL_3_REG_ADDR, cntl3.val);
 }
 
-/*
- * Least-squares fit of ro_count = m * vcore_mv + b over the sweep samples.
- */
+/* Least-squares fit of ro_count = m * vcore_mv + b over the sweep samples. */
 static struct fll_fit linear_fit(const uint32_t *x, const uint32_t *y, size_t n)
 {
 	float sx = 0, sy = 0, sxx = 0, sxy = 0;
@@ -380,9 +360,7 @@ static struct fll_fit linear_fit(const uint32_t *x, const uint32_t *y, size_t n)
 	return fit;
 }
 
-/*
- * Sweep VCORE, sample the RO counter at each point, and fit the line.
- */
+/* Sweep VCORE, sample the RO counter at each point, and fit the line */
 static struct fll_fit characterize(void)
 {
 	uint32_t ro[SWEEP_POINTS];
@@ -425,10 +403,7 @@ static uint16_t count_for_vcore(uint32_t vcore_mv)
  */
 void clock_stretcher_repoint(uint32_t vcore_mv)
 {
-	/*
-	 * Safe to call from the generic voltage-change choke point (VoltageChange()):
-	 * no-op until a valid fit exists.
-	 */
+	/* no-op until a valid fit exists. */
 	if (!IS_ENABLED(CONFIG_TT_BH_ARC_CLOCK_STRETCHER) || !clock_stretcher_fit_valid) {
 		return;
 	}
@@ -442,9 +417,7 @@ void clock_stretcher_repoint(uint32_t vcore_mv)
 
 	FLL_CNTL_3_reg_u cntl3 = {.val = ReadReg(FLL_CNTL_3_REG_ADDR)};
 
-	/*
-	 * arm fw_nominal_vdd to use the linear-fit nominal RO count
-	 */
+	/* arm fw_nominal_vdd to use the linear-fit nominal RO count */
 	if (cntl3.f.dd_use_fw_nominal_vdd != 1 || cntl3.f.dd_use_nominal_vdd != 0 ||
 	    cntl3.f.dd_enable != 1) {
 		cntl3.f.dd_use_nominal_vdd = 0;
@@ -547,11 +520,6 @@ static int clock_stretcher_init(void)
 
 	uint32_t boot_vcore = get_vcore();
 
-	/*
-	 * The FLL_CNTL_* registers are volatile and reset every boot, so the static
-	 * detector config must be re-applied unconditionally. Only the fit is
-	 * persisted.
-	 */
 	apply_static_config();
 
 	if (load_fit_from_spirom(&clock_stretcher_fit)) {
@@ -580,24 +548,7 @@ static int clock_stretcher_init(void)
 }
 SYS_INIT_APP(clock_stretcher_init);
 
-/*
- * Host-facing message handlers (t6py / SMC message queue).
- *
- * Registered unconditionally, but they refuse to operate when the feature is
- * compiled out (CONFIG_TT_BH_ARC_CLOCK_STRETCHER=n) by returning a nonzero
- * error code -- the fit is never populated in that case.
- */
-
-/*
- * TT_SMC_MSG_GET_CLK_STRETCHER_FIT: report the calibrated fit and detector state.
- *
- * Response:
- *   data[1] = fit slope m * 1000, as a signed int32 (RO counts per mV)
- *   data[2] = fit intercept b * 1000, as a signed int32 (RO counts)
- *   data[3] = 1 if the fit is valid (loaded or characterised), else 0
- *   data[4] = FLL_CNTL_3.dd_enable (1 = detector armed)
- *   data[5] = FLL_CNTL_5.dd_fw_nominal_vdd (nominal RO count currently in use)
- */
+/* TT_SMC_MSG_GET_CLK_STRETCHER_FIT: report the calibrated fit and detector state. */
 static uint8_t get_clk_stretcher_fit_handler(const union request *request,
 					     struct response *response)
 {
@@ -618,24 +569,7 @@ static uint8_t get_clk_stretcher_fit_handler(const union request *request,
 	return 0;
 }
 
-/*
- * TT_SMC_MSG_RECALIBRATE_CLK_STRETCHER: re-run the VCORE sweep + fit at runtime,
- * so a fresh characterisation can be forced without first erasing the SPIROM
- * blob (a persisted fit otherwise makes every boot skip the sweep).
- *
- * The detector is disarmed for the duration of the sweep (via
- * apply_static_config(), which clears dd_enable) so stretching cannot perturb
- * the measurement, then re-pointed and re-armed at the current VCORE.
- *
- * Request:
- *   data[1] != 0 -> also persist the new fit to SPIROM. Default (0) updates only
- *                   the live fit, avoiding a duplicate tt-boot-fs FD on every
- *                   recalibration (see save_fit_to_spirom()).
- * Response:
- *   data[1] = new slope m * 1000 (signed int32)
- *   data[2] = new intercept b * 1000 (signed int32)
- *   data[3] = 1 if a requested persist failed, else 0
- */
+/* TT_SMC_MSG_RECALIBRATE_CLK_STRETCHER: re-run the VCORE sweep + fit at runtime */
 static uint8_t recalibrate_clk_stretcher_handler(const union request *request,
 						 struct response *response)
 {
