@@ -509,12 +509,64 @@ typedef union {
  */
 #define TAG_EST_BOARD_POWER_LIMIT 82
 
+/** @brief SerDes VDD rail voltage in mV.
+ *
+ * Sampled by the DVFS loop only while the rail is enabled with
+ * @ref TT_SMC_MSG_CHARACTERISATION and @ref TT_SUB_MSG_SET_RAIL_MEASUREMENT; reads 0
+ * until then, and holds its last value while disabled. Not present on the left chip of
+ * a p300.
+ */
+#define TAG_SERDES_VDD_VOLTAGE 83
+
+/** @brief SerDes VDD rail current in amps, in signed int 16.16 format.
+ *
+ * Sampled under the same conditions as @ref TAG_SERDES_VDD_VOLTAGE.
+ */
+#define TAG_SERDES_VDD_CURRENT 84
+
+/** @brief SerDes VDDL rail voltage in mV.
+ *
+ * Sampled under the same conditions as @ref TAG_SERDES_VDD_VOLTAGE.
+ */
+#define TAG_SERDES_VDDL_VOLTAGE 85
+
+/** @brief SerDes VDDL rail current in amps, in signed int 16.16 format.
+ *
+ * Sampled under the same conditions as @ref TAG_SERDES_VDD_VOLTAGE.
+ */
+#define TAG_SERDES_VDDL_CURRENT 86
+
+/** @brief SerDes VDDH rail voltage in mV.
+ *
+ * Sampled under the same conditions as @ref TAG_SERDES_VDD_VOLTAGE.
+ */
+#define TAG_SERDES_VDDH_VOLTAGE 87
+
+/** @brief SerDes VDDH rail current in amps, in signed int 16.16 format.
+ *
+ * Sampled under the same conditions as @ref TAG_SERDES_VDD_VOLTAGE.
+ */
+#define TAG_SERDES_VDDH_CURRENT 88
+
+/** @brief VCOREM rail voltage in mV.
+ *
+ * Sampled under the same conditions as @ref TAG_SERDES_VDD_VOLTAGE.
+ */
+#define TAG_VCOREM_VOLTAGE 89
+
+/** @brief VCOREM rail current in amps, in signed int 16.16 format.
+ *
+ * Read over the AVS bus. Sampled under the same conditions as
+ * @ref TAG_SERDES_VDD_VOLTAGE.
+ */
+#define TAG_VCOREM_CURRENT 90
+
 /** @} */ /* end of telemetry_tag group */
 
 /* Not a real tag, signifies the last tag in the list.
  * MUST be incremented if new tags are defined.
  */
-#define TAG_COUNT 83
+#define TAG_COUNT 91
 
 /* Telemetry tags are at offset `tag` in the telemetry buffer */
 #define TELEM_OFFSET(tag) (tag)

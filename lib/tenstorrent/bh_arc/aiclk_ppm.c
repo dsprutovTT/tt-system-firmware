@@ -7,6 +7,7 @@
 #include "aiclk_ppm.h"
 #include "cat.h"
 #include "dvfs.h"
+#include "rail_measure.h"
 #include "telemetry.h"
 #include "throttler.h"
 #include "voltage.h"
@@ -551,6 +552,11 @@ static uint8_t characterisation_handler(const union request *request, struct res
 	case TT_SUB_MSG_SET_EST_BOARD_POWER_LIMIT:
 		return ThrottlerSetEstBoardPowerLimit(request->characterisation_msg.submsg_data
 							      .est_board_power_limit.power_limit);
+
+	case TT_SUB_MSG_SET_RAIL_MEASUREMENT:
+		return RailMeasureSetEnabled(
+			request->characterisation_msg.submsg_data.rail_measurement.rail_id,
+			request->characterisation_msg.submsg_data.rail_measurement.enable);
 
 	default:
 		LOG_WRN("Unknown characterization submessage ID: 0x%02x",

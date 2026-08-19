@@ -835,6 +835,21 @@ struct char_est_board_power_limit_submsg {
 	uint32_t power_limit;
 };
 
+/** @brief Submessage for adding/removing a rail from the DVFS measurement loop
+ * @details Names one rail per message. The DVFS loop samples the enabled rails
+ * round-robin, one rail per 1 ms tick, and publishes the results in the per-rail
+ * telemetry tags (see @ref TAG_SERDES_VDD_VOLTAGE and friends). Rails are disabled at
+ * boot, so nothing is measured until the host asks for it.
+ */
+struct char_rail_measurement_submsg {
+	/** @brief Rail to add or remove, one of @ref char_rail_id */
+	uint8_t rail_id;
+	/** @brief 0 to stop measuring the rail, 1 to start */
+	uint8_t enable;
+	/** @brief Two bytes of padding */
+	uint8_t pad[2];
+};
+
 /** @brief Union of all possible characterization submessage payloads */
 union characterisation_submsg_data {
 	/** @brief Set host-requested minimum frequency floor */
@@ -849,6 +864,8 @@ union characterisation_submsg_data {
 	struct char_telemetry_interval_submsg telemetry_interval;
 	/** @brief Set the estimated board power throttler limit */
 	struct char_est_board_power_limit_submsg est_board_power_limit;
+	/** @brief Add/remove a rail from the DVFS measurement loop */
+	struct char_rail_measurement_submsg rail_measurement;
 	/* add to this union to define more sub-message payloads */
 	/** @brief Generic fallback for raw access */
 	uint8_t raw_data[4];
