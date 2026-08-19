@@ -30,6 +30,7 @@
 #include "fan_ctrl.h"
 #include "functional_efuse.h"
 #include "harvesting.h"
+#include "rail_measure.h"
 #include "reg.h"
 #include "regulator.h"
 #include "status_reg.h"
@@ -183,6 +184,14 @@ static struct telemetry_table telemetry_table = {
 		[73] = {TAG_FW_CAPABILITIES_0, TELEM_OFFSET(TAG_FW_CAPABILITIES_0)},
 		[74] = {TAG_FW_ACTIVE_CONFIG_0, TELEM_OFFSET(TAG_FW_ACTIVE_CONFIG_0)},
 		[75] = {TAG_FLASH_JEDEC_ID, TELEM_OFFSET(TAG_FLASH_JEDEC_ID)},
+		[76] = {TAG_SERDES_VDD_VOLTAGE, TELEM_OFFSET(TAG_SERDES_VDD_VOLTAGE)},
+		[77] = {TAG_SERDES_VDD_CURRENT, TELEM_OFFSET(TAG_SERDES_VDD_CURRENT)},
+		[78] = {TAG_SERDES_VDDL_VOLTAGE, TELEM_OFFSET(TAG_SERDES_VDDL_VOLTAGE)},
+		[79] = {TAG_SERDES_VDDL_CURRENT, TELEM_OFFSET(TAG_SERDES_VDDL_CURRENT)},
+		[80] = {TAG_SERDES_VDDH_VOLTAGE, TELEM_OFFSET(TAG_SERDES_VDDH_VOLTAGE)},
+		[81] = {TAG_SERDES_VDDH_CURRENT, TELEM_OFFSET(TAG_SERDES_VDDH_CURRENT)},
+		[82] = {TAG_VCOREM_VOLTAGE, TELEM_OFFSET(TAG_VCOREM_VOLTAGE)},
+		[83] = {TAG_VCOREM_CURRENT, TELEM_OFFSET(TAG_VCOREM_CURRENT)},
 	},
 };
 /* clang-format on */
@@ -519,6 +528,34 @@ static void write_static_telemetry(uint32_t app_version)
 	telemetry[TAG_FW_ACTIVE_CONFIG_0] = active_config.u32_all;
 }
 
+/* Publish the rails the DVFS loop has been asked to measure. A rail that has never been
+ * sampled leaves its tags alone, so a disabled rail reads 0 and a rail that is turned off
+ * again holds its last sample.
+ */
+static void update_rail_telemetry(void)
+{
+	static const uint32_t rail_tags[TT_CHAR_RAIL_COUNT][2] = {
+		[TT_CHAR_RAIL_SERDES_VDD] = {TAG_SERDES_VDD_VOLTAGE, TAG_SERDES_VDD_CURRENT},
+		[TT_CHAR_RAIL_SERDES_VDDL] = {TAG_SERDES_VDDL_VOLTAGE, TAG_SERDES_VDDL_CURRENT},
+		[TT_CHAR_RAIL_SERDES_VDDH] = {TAG_SERDES_VDDH_VOLTAGE, TAG_SERDES_VDDH_CURRENT},
+		[TT_CHAR_RAIL_VCOREM] = {TAG_VCOREM_VOLTAGE, TAG_VCOREM_CURRENT},
+	};
+
+	for (uint8_t rail = 0; rail < TT_CHAR_RAIL_COUNT; rail++) {
+		float voltage_mv;
+		float current_a;
+
+		if (!RailMeasureGet(rail, &voltage_mv, &current_a)) {
+			continue;
+		}
+
+		/* voltage reported in mV, truncated to uint32_t */
+		telemetry[rail_tags[rail][0]] = voltage_mv;
+		/* current reported in A, in signed int 16.16 format */
+		telemetry[rail_tags[rail][1]] = ConvertFloatToTelemetry(current_a);
+	}
+}
+
 static void update_telemetry(void)
 {
 	SetPostCode(POST_CODE_SRC_CMFW, POST_CODE_TELEMETRY_START);
@@ -610,6 +647,7 @@ static void update_telemetry(void)
 	telemetry[TAG_GDDR_WEST_IO_POWER] = telemetry_internal_data.gddr_io_power_west;
 	/* reported in W, truncated to uint32_t */
 	telemetry[TAG_GDDR_EAST_IO_POWER] = telemetry_internal_data.gddr_io_power_east;
+	update_rail_telemetry();
 	telemetry[TAG_NOP_START_COUNT] = GetStartNOPCount();
 	telemetry[TAG_NOP_ON_DURATION] = GetNOPOnDuration(telem_update_interval);
 	telemetry[TAG_TIMER_HEARTBEAT]++; /* Incremented every time the timer is called */

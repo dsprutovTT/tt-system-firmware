@@ -81,6 +81,7 @@ if(NOT CONFIG_TT_SMC_RECOVERY)
     i2c_messages.c
     pcie_dma.c
     pvt.c
+    rail_measure.c
     regulator.c
     regulator_config.c
     serdes_eth.c
