@@ -126,6 +126,34 @@ float GetGddrEastIoCurrent(void)
 	return ConvertGddrIoCurrentToFloat(iout);
 }
 
+/* The SerDes VRs are MAX20730-family parts driven with no feedback divider, so READ_VOUT
+ * is LINEAR16 with the same fixed 2^-9 exponent that set_max20730() writes, and READ_IOUT
+ * is LINEAR11.
+ */
+#define SERDES_VOUT_LSB_MV (1000.0f / LINEAR_FORMAT_CONSTANT)
+
+/* The function returns a SerDes rail's output voltage in mV. */
+float GetSerdesRailVoltage(uint8_t slave_addr)
+{
+	I2CInit(I2CMst, slave_addr, I2CFastMode, PMBUS_MST_ID);
+	uint16_t vout = 0;
+
+	I2CReadBytes(PMBUS_MST_ID, READ_VOUT, PMBUS_CMD_BYTE_SIZE, (uint8_t *)&vout,
+		     READ_VOUT_DATA_BYTE_SIZE, PMBUS_FLIP_BYTES);
+	return vout * SERDES_VOUT_LSB_MV;
+}
+
+/* The function returns a SerDes rail's output current in A. */
+float GetSerdesRailCurrent(uint8_t slave_addr)
+{
+	I2CInit(I2CMst, slave_addr, I2CFastMode, PMBUS_MST_ID);
+	uint16_t iout = 0;
+
+	I2CReadBytes(PMBUS_MST_ID, READ_IOUT, PMBUS_CMD_BYTE_SIZE, (uint8_t *)&iout,
+		     READ_IOUT_DATA_BYTE_SIZE, PMBUS_FLIP_BYTES);
+	return ConvertLinear11ToFloat(iout);
+}
+
 /* The function returns the GDDR west IO rail power in W. */
 float GetGddrWestIoPower(void)
 {
