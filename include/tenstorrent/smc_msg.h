@@ -190,7 +190,7 @@ enum char_submsg_ids {
  *
  * Used as the rail_id field of @ref char_rail_measurement_submsg. The VCORE and GDDR IO
  * rails are always measured and are reported through their own telemetry tags, so they
- * are not listed here.
+ * are not listed here. GDDR VDDR / VDDA are optional and gated like the SerDes rails.
  */
 enum char_rail_id {
 	/** @brief SerDes VDD rail (not present on the left chip of a p300) */
@@ -201,6 +201,10 @@ enum char_rail_id {
 	TT_CHAR_RAIL_SERDES_VDDH = 0x2,
 	/** @brief VCOREM rail */
 	TT_CHAR_RAIL_VCOREM = 0x3,
+	/** @brief GDDR VDDR rail (single regulator on Galaxy / P150) */
+	TT_CHAR_RAIL_GDDR_VDDR = 0x4,
+	/** @brief GDDR VDDA rail (east + west regulators sampled together) */
+	TT_CHAR_RAIL_GDDR_VDDA = 0x5,
 	/** @brief Number of measurable rails, not a valid rail_id */
 	TT_CHAR_RAIL_COUNT,
 };
