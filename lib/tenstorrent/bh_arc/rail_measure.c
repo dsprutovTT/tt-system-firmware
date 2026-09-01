@@ -18,44 +18,81 @@ LOG_MODULE_REGISTER(rail_measure);
 
 static const struct device *const fwtable_dev = DEVICE_DT_GET(DT_NODELABEL(fwtable));
 
+/* Feedback-divider scalers matching host characterisation (0.85 / 1.8). */
+#define GDDR_VDDR_VOUT_SCALER (0.85f / 1.8f)
+#define GDDR_VDDA_VOUT_SCALER (0.85f / 1.8f)
+
+struct rail_sample {
+	float voltage_mv;
+	float current_a;
+	/* Secondary side for dual-regulator rails (GDDR VDDA west). */
+	float voltage_mv_2;
+	float current_a_2;
+	bool dual;
+	bool valid;
+};
+
 /* The SerDes VRs are read over PMBus. READ_VOUT/READ_IOUT decoding lives in regulator.c. */
-static bool read_serdes_vdd(float *voltage_mv, float *current_a)
+static bool read_serdes_vdd(struct rail_sample *out)
 {
-	*voltage_mv = GetSerdesRailVoltage(SERDES_VDD_ADDR);
-	*current_a = GetSerdesRailCurrent(SERDES_VDD_ADDR);
+	out->voltage_mv = GetSerdesRailVoltage(SERDES_VDD_ADDR);
+	out->current_a = GetSerdesRailCurrent(SERDES_VDD_ADDR);
+	out->dual = false;
 	return true;
 }
 
-static bool read_serdes_vddl(float *voltage_mv, float *current_a)
+static bool read_serdes_vddl(struct rail_sample *out)
 {
-	*voltage_mv = GetSerdesRailVoltage(SERDES_VDDL_ADDR);
-	*current_a = GetSerdesRailCurrent(SERDES_VDDL_ADDR);
+	out->voltage_mv = GetSerdesRailVoltage(SERDES_VDDL_ADDR);
+	out->current_a = GetSerdesRailCurrent(SERDES_VDDL_ADDR);
+	out->dual = false;
 	return true;
 }
 
-static bool read_serdes_vddh(float *voltage_mv, float *current_a)
+static bool read_serdes_vddh(struct rail_sample *out)
 {
-	*voltage_mv = GetSerdesRailVoltage(SERDES_VDDH_ADDR);
-	*current_a = GetSerdesRailCurrent(SERDES_VDDH_ADDR);
+	out->voltage_mv = GetSerdesRailVoltage(SERDES_VDDH_ADDR);
+	out->current_a = GetSerdesRailCurrent(SERDES_VDDH_ADDR);
+	out->dual = false;
 	return true;
 }
 
 /* VCOREM needs no PMBus decoding: the MAX20816 reports VOUT at a flat 0.5 mV/LSB, and the
  * AVS bus reports per-rail current directly in amps.
  */
-static bool read_vcorem(float *voltage_mv, float *current_a)
+static bool read_vcorem(struct rail_sample *out)
 {
-	if (AVSReadCurrent(AVS_VCOREM_RAIL, current_a) != AVSOk) {
+	if (AVSReadCurrent(AVS_VCOREM_RAIL, &out->current_a) != AVSOk) {
 		return false;
 	}
 
-	*voltage_mv = get_vcorem();
+	out->voltage_mv = get_vcorem();
+	out->dual = false;
+	return true;
+}
+
+static bool read_gddr_vddr(struct rail_sample *out)
+{
+	out->voltage_mv = GetMpsRailVoltageMv(GDDR_VDDR_ADDR, GDDR_VDDR_VOUT_SCALER);
+	out->current_a = GetMpsRailCurrentA(GDDR_VDDR_ADDR);
+	out->dual = false;
+	return true;
+}
+
+/* One DVFS tick samples both VDDA regulators so east/west stay paired. */
+static bool read_gddr_vdda(struct rail_sample *out)
+{
+	out->voltage_mv = GetMpsRailVoltageMv(GDDR_VDDA_EAST_ADDR, GDDR_VDDA_VOUT_SCALER);
+	out->current_a = GetMpsRailCurrentA(GDDR_VDDA_EAST_ADDR);
+	out->voltage_mv_2 = GetMpsRailVoltageMv(GDDR_VDDA_WEST_ADDR, GDDR_VDDA_VOUT_SCALER);
+	out->current_a_2 = GetMpsRailCurrentA(GDDR_VDDA_WEST_ADDR);
+	out->dual = true;
 	return true;
 }
 
 struct rail_desc {
 	const char *name;
-	bool (*read)(float *voltage_mv, float *current_a);
+	bool (*read)(struct rail_sample *out);
 };
 
 /* clang-format off */
@@ -64,14 +101,10 @@ static const struct rail_desc rails[TT_CHAR_RAIL_COUNT] = {
 	[TT_CHAR_RAIL_SERDES_VDDL] = { .name = "serdes_vddl", .read = read_serdes_vddl, },
 	[TT_CHAR_RAIL_SERDES_VDDH] = { .name = "serdes_vddh", .read = read_serdes_vddh, },
 	[TT_CHAR_RAIL_VCOREM]      = { .name = "vcorem",      .read = read_vcorem, },
+	[TT_CHAR_RAIL_GDDR_VDDR]   = { .name = "gddr_vddr",   .read = read_gddr_vddr, },
+	[TT_CHAR_RAIL_GDDR_VDDA]   = { .name = "gddr_vdda",   .read = read_gddr_vdda, },
 };
 /* clang-format on */
-
-struct rail_sample {
-	float voltage_mv;
-	float current_a;
-	bool valid;
-};
 
 static struct rail_sample samples[TT_CHAR_RAIL_COUNT];
 
@@ -135,15 +168,13 @@ void RailMeasureUpdate(void)
 		next_rail = (rail + 1) % TT_CHAR_RAIL_COUNT;
 
 #ifndef CONFIG_TT_BH_ARC_EMUL
-		float voltage_mv;
-		float current_a;
+		struct rail_sample sample = {0};
 
-		if (!rails[rail].read(&voltage_mv, &current_a)) {
+		if (!rails[rail].read(&sample)) {
 			return;
 		}
 
-		samples[rail].voltage_mv = voltage_mv;
-		samples[rail].current_a = current_a;
+		samples[rail] = sample;
 #endif
 		samples[rail].valid = true;
 		return;
@@ -158,5 +189,19 @@ bool RailMeasureGet(uint8_t rail, float *voltage_mv, float *current_a)
 
 	*voltage_mv = samples[rail].voltage_mv;
 	*current_a = samples[rail].current_a;
+	return true;
+}
+
+bool RailMeasureGetDual(uint8_t rail, float *voltage_mv, float *current_a, float *voltage_mv_2,
+			float *current_a_2)
+{
+	if (rail >= TT_CHAR_RAIL_COUNT || !samples[rail].valid || !samples[rail].dual) {
+		return false;
+	}
+
+	*voltage_mv = samples[rail].voltage_mv;
+	*current_a = samples[rail].current_a;
+	*voltage_mv_2 = samples[rail].voltage_mv_2;
+	*current_a_2 = samples[rail].current_a_2;
 	return true;
 }

@@ -561,12 +561,39 @@ typedef union {
  */
 #define TAG_VCOREM_CURRENT 90
 
+/** @brief GDDR VDDR rail voltage in mV.
+ *
+ * Sampled under the same conditions as @ref TAG_SERDES_VDD_VOLTAGE.
+ */
+#define TAG_GDDR_VDDR_VOLTAGE 91
+
+/** @brief GDDR VDDR rail current in amps, in signed int 16.16 format.
+ *
+ * Sampled under the same conditions as @ref TAG_SERDES_VDD_VOLTAGE.
+ */
+#define TAG_GDDR_VDDR_CURRENT 92
+
+/** @brief GDDR VDDA east rail voltage in mV.
+ *
+ * Sampled together with west when @ref TT_CHAR_RAIL_GDDR_VDDA is enabled.
+ */
+#define TAG_GDDR_VDDA_EAST_VOLTAGE 93
+
+/** @brief GDDR VDDA east rail current in amps, in signed int 16.16 format. */
+#define TAG_GDDR_VDDA_EAST_CURRENT 94
+
+/** @brief GDDR VDDA west rail voltage in mV. */
+#define TAG_GDDR_VDDA_WEST_VOLTAGE 95
+
+/** @brief GDDR VDDA west rail current in amps, in signed int 16.16 format. */
+#define TAG_GDDR_VDDA_WEST_CURRENT 96
+
 /** @} */ /* end of telemetry_tag group */
 
 /* Not a real tag, signifies the last tag in the list.
  * MUST be incremented if new tags are defined.
  */
-#define TAG_COUNT 91
+#define TAG_COUNT 97
 
 /* Telemetry tags are at offset `tag` in the telemetry buffer */
 #define TELEM_OFFSET(tag) (tag)

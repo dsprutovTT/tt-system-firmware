@@ -44,4 +44,14 @@ void RailMeasureUpdate(void);
  */
 bool RailMeasureGet(uint8_t rail, float *voltage_mv, float *current_a);
 
+/**
+ * @brief Retrieve a dual-regulator sample (east + west)
+ *
+ * Only valid for rails that publish two sides (currently GDDR VDDA).
+ *
+ * @return true if the rail is enabled, valid, and dual; false otherwise
+ */
+bool RailMeasureGetDual(uint8_t rail, float *voltage_mv, float *current_a, float *voltage_mv_2,
+			float *current_a_2);
+
 #endif
