@@ -192,6 +192,12 @@ static struct telemetry_table telemetry_table = {
 		[81] = {TAG_SERDES_VDDH_CURRENT, TELEM_OFFSET(TAG_SERDES_VDDH_CURRENT)},
 		[82] = {TAG_VCOREM_VOLTAGE, TELEM_OFFSET(TAG_VCOREM_VOLTAGE)},
 		[83] = {TAG_VCOREM_CURRENT, TELEM_OFFSET(TAG_VCOREM_CURRENT)},
+		[84] = {TAG_GDDR_VDDR_VOLTAGE, TELEM_OFFSET(TAG_GDDR_VDDR_VOLTAGE)},
+		[85] = {TAG_GDDR_VDDR_CURRENT, TELEM_OFFSET(TAG_GDDR_VDDR_CURRENT)},
+		[86] = {TAG_GDDR_VDDA_EAST_VOLTAGE, TELEM_OFFSET(TAG_GDDR_VDDA_EAST_VOLTAGE)},
+		[87] = {TAG_GDDR_VDDA_EAST_CURRENT, TELEM_OFFSET(TAG_GDDR_VDDA_EAST_CURRENT)},
+		[88] = {TAG_GDDR_VDDA_WEST_VOLTAGE, TELEM_OFFSET(TAG_GDDR_VDDA_WEST_VOLTAGE)},
+		[89] = {TAG_GDDR_VDDA_WEST_CURRENT, TELEM_OFFSET(TAG_GDDR_VDDA_WEST_CURRENT)},
 	},
 };
 /* clang-format on */
@@ -539,11 +545,26 @@ static void update_rail_telemetry(void)
 		[TT_CHAR_RAIL_SERDES_VDDL] = {TAG_SERDES_VDDL_VOLTAGE, TAG_SERDES_VDDL_CURRENT},
 		[TT_CHAR_RAIL_SERDES_VDDH] = {TAG_SERDES_VDDH_VOLTAGE, TAG_SERDES_VDDH_CURRENT},
 		[TT_CHAR_RAIL_VCOREM] = {TAG_VCOREM_VOLTAGE, TAG_VCOREM_CURRENT},
+		[TT_CHAR_RAIL_GDDR_VDDR] = {TAG_GDDR_VDDR_VOLTAGE, TAG_GDDR_VDDR_CURRENT},
+		/* Dual rail: east uses [0]/ west handled below. */
+		[TT_CHAR_RAIL_GDDR_VDDA] = {TAG_GDDR_VDDA_EAST_VOLTAGE, TAG_GDDR_VDDA_EAST_CURRENT},
 	};
 
 	for (uint8_t rail = 0; rail < TT_CHAR_RAIL_COUNT; rail++) {
 		float voltage_mv;
 		float current_a;
+		float voltage_mv_2;
+		float current_a_2;
+
+		if (RailMeasureGetDual(rail, &voltage_mv, &current_a, &voltage_mv_2,
+				       &current_a_2)) {
+			telemetry[TAG_GDDR_VDDA_EAST_VOLTAGE] = voltage_mv;
+			telemetry[TAG_GDDR_VDDA_EAST_CURRENT] = ConvertFloatToTelemetry(current_a);
+			telemetry[TAG_GDDR_VDDA_WEST_VOLTAGE] = voltage_mv_2;
+			telemetry[TAG_GDDR_VDDA_WEST_CURRENT] =
+				ConvertFloatToTelemetry(current_a_2);
+			continue;
+		}
 
 		if (!RailMeasureGet(rail, &voltage_mv, &current_a)) {
 			continue;
