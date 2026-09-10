@@ -204,6 +204,17 @@ float GetVcorePower(void)
 	return ConvertLinear11ToFloat(pout);
 }
 
+/* The function returns the VCOREM rail power in W (MAX20816 READ_POUT). */
+float GetVcoremPower(void)
+{
+	I2CInit(I2CMst, P0V8_VCOREM_ADDR, I2CFastMode, PMBUS_MST_ID);
+	uint16_t pout;
+
+	I2CReadBytes(PMBUS_MST_ID, READ_POUT, PMBUS_CMD_BYTE_SIZE, (uint8_t *)&pout,
+		     READ_POUT_DATA_BYTE_SIZE, PMBUS_FLIP_BYTES);
+	return ConvertLinear11ToFloat(pout);
+}
+
 static void set_max20730(uint32_t slave_addr, uint32_t voltage_in_mv, float rfb1, float rfb2)
 {
 	I2CInit(I2CMst, slave_addr, I2CFastMode, PMBUS_MST_ID);
