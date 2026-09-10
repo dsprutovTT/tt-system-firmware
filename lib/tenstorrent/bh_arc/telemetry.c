@@ -198,6 +198,7 @@ static struct telemetry_table telemetry_table = {
 		[87] = {TAG_GDDR_VDDA_EAST_CURRENT, TELEM_OFFSET(TAG_GDDR_VDDA_EAST_CURRENT)},
 		[88] = {TAG_GDDR_VDDA_WEST_VOLTAGE, TELEM_OFFSET(TAG_GDDR_VDDA_WEST_VOLTAGE)},
 		[89] = {TAG_GDDR_VDDA_WEST_CURRENT, TELEM_OFFSET(TAG_GDDR_VDDA_WEST_CURRENT)},
+		[90] = {TAG_VCOREM_POWER_POUT, TELEM_OFFSET(TAG_VCOREM_POWER_POUT)},
 	},
 };
 /* clang-format on */
@@ -574,6 +575,15 @@ static void update_rail_telemetry(void)
 		telemetry[rail_tags[rail][0]] = voltage_mv;
 		/* current reported in A, in signed int 16.16 format */
 		telemetry[rail_tags[rail][1]] = ConvertFloatToTelemetry(current_a);
+
+		if (rail == TT_CHAR_RAIL_VCOREM) {
+			float power_pout_w;
+
+			if (RailMeasureGetPower(rail, &power_pout_w)) {
+				telemetry[TAG_VCOREM_POWER_POUT] =
+					ConvertFloatToTelemetry(power_pout_w);
+			}
+		}
 	}
 }
 

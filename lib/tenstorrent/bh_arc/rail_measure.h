@@ -54,4 +54,11 @@ bool RailMeasureGet(uint8_t rail, float *voltage_mv, float *current_a);
 bool RailMeasureGetDual(uint8_t rail, float *voltage_mv, float *current_a, float *voltage_mv_2,
 			float *current_a_2);
 
+/**
+ * @brief Retrieve PMBus READ_POUT power for a rail (W)
+ *
+ * Currently populated for @ref TT_CHAR_RAIL_VCOREM only.
+ */
+bool RailMeasureGetPower(uint8_t rail, float *power_pout_w);
+
 #endif

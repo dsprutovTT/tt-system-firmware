@@ -25,6 +25,7 @@ static const struct device *const fwtable_dev = DEVICE_DT_GET(DT_NODELABEL(fwtab
 struct rail_sample {
 	float voltage_mv;
 	float current_a;
+	float power_pout_w;
 	/* Secondary side for dual-regulator rails (GDDR VDDA west). */
 	float voltage_mv_2;
 	float current_a_2;
@@ -67,6 +68,7 @@ static bool read_vcorem(struct rail_sample *out)
 	}
 
 	out->voltage_mv = get_vcorem();
+	out->power_pout_w = GetVcoremPower();
 	out->dual = false;
 	return true;
 }
@@ -203,5 +205,15 @@ bool RailMeasureGetDual(uint8_t rail, float *voltage_mv, float *current_a, float
 	*current_a = samples[rail].current_a;
 	*voltage_mv_2 = samples[rail].voltage_mv_2;
 	*current_a_2 = samples[rail].current_a_2;
+	return true;
+}
+
+bool RailMeasureGetPower(uint8_t rail, float *power_pout_w)
+{
+	if (rail >= TT_CHAR_RAIL_COUNT || !samples[rail].valid) {
+		return false;
+	}
+
+	*power_pout_w = samples[rail].power_pout_w;
 	return true;
 }

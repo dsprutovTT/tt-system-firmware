@@ -39,6 +39,7 @@ void set_vcorem(uint32_t voltage_in_mv);
 void set_gddr_vddr(PcbType board_type, uint32_t voltage_in_mv);
 float GetVcoreCurrent(void);
 float GetVcorePower(void);
+float GetVcoremPower(void);
 void SwitchVoutControl(enum VoltageCmdSource source);
 float GetSerdesRailVoltage(uint8_t slave_addr); /* returns voltage in mV. */
 float GetSerdesRailCurrent(uint8_t slave_addr); /* returns current in A. */

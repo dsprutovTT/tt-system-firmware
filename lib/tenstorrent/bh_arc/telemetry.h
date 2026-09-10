@@ -573,12 +573,19 @@ typedef union {
 /** @brief GDDR VDDA west rail current in amps, in signed int 16.16 format. */
 #define TAG_GDDR_VDDA_WEST_CURRENT 94
 
+/** @brief VCOREM rail power in W from MAX20816 READ_POUT, signed int 16.16 format.
+ *
+ * Populated when @ref TT_CHAR_RAIL_VCOREM is enabled and sampled.
+ * Host may still compute V×I from tags 87/88 for comparison.
+ */
+#define TAG_VCOREM_POWER_POUT 95
+
 /** @} */ /* end of telemetry_tag group */
 
 /* Not a real tag, signifies the last tag in the list.
  * MUST be incremented if new tags are defined.
  */
-#define TAG_COUNT 95
+#define TAG_COUNT 96
 
 /* Telemetry tags are at offset `tag` in the telemetry buffer */
 #define TELEM_OFFSET(tag) (tag)
