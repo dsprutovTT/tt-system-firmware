@@ -126,6 +126,34 @@ float GetGddrEastIoCurrent(void)
 	return ConvertGddrIoCurrentToFloat(iout);
 }
 
+/* The SerDes VRs are MAX20730-family parts driven with no feedback divider, so READ_VOUT
+ * is LINEAR16 with the same fixed 2^-9 exponent that set_max20730() writes, and READ_IOUT
+ * is LINEAR11.
+ */
+#define SERDES_VOUT_LSB_MV (1000.0f / LINEAR_FORMAT_CONSTANT)
+
+/* The function returns a SerDes rail's output voltage in mV. */
+float GetSerdesRailVoltage(uint8_t slave_addr)
+{
+	I2CInit(I2CMst, slave_addr, I2CFastMode, PMBUS_MST_ID);
+	uint16_t vout = 0;
+
+	I2CReadBytes(PMBUS_MST_ID, READ_VOUT, PMBUS_CMD_BYTE_SIZE, (uint8_t *)&vout,
+		     READ_VOUT_DATA_BYTE_SIZE, PMBUS_FLIP_BYTES);
+	return vout * SERDES_VOUT_LSB_MV;
+}
+
+/* The function returns a SerDes rail's output current in A. */
+float GetSerdesRailCurrent(uint8_t slave_addr)
+{
+	I2CInit(I2CMst, slave_addr, I2CFastMode, PMBUS_MST_ID);
+	uint16_t iout = 0;
+
+	I2CReadBytes(PMBUS_MST_ID, READ_IOUT, PMBUS_CMD_BYTE_SIZE, (uint8_t *)&iout,
+		     READ_IOUT_DATA_BYTE_SIZE, PMBUS_FLIP_BYTES);
+	return ConvertLinear11ToFloat(iout);
+}
+
 /* The function returns the GDDR west IO rail power in W. */
 float GetGddrWestIoPower(void)
 {
@@ -138,10 +166,48 @@ float GetGddrEastIoPower(void)
 	return GetGddrEastIoCurrent() * GDDR_IO_RAIL_VOLTAGE;
 }
 
+/* MPS GDDR VDDR/VDDA regulators: READ_VOUT is a 13-bit direct code at 1.25 mV/LSB
+ * before the feedback divider scaler; READ_IOUT is a 13-bit direct code at 62.5 mA/LSB.
+ */
+#define MPS_VOUT_LSB_MV 1.25f
+#define MPS_IOUT_LSB_A  0.0625f
+#define MPS_DIRECT_MASK 0x1FFF
+
+float GetMpsRailVoltageMv(uint8_t slave_addr, float vout_scaler)
+{
+	I2CInit(I2CMst, slave_addr, I2CFastMode, PMBUS_MST_ID);
+	uint16_t vout = 0;
+
+	I2CReadBytes(PMBUS_MST_ID, READ_VOUT, PMBUS_CMD_BYTE_SIZE, (uint8_t *)&vout,
+		     READ_VOUT_DATA_BYTE_SIZE, PMBUS_FLIP_BYTES);
+	return (vout & MPS_DIRECT_MASK) * MPS_VOUT_LSB_MV * vout_scaler;
+}
+
+float GetMpsRailCurrentA(uint8_t slave_addr)
+{
+	I2CInit(I2CMst, slave_addr, I2CFastMode, PMBUS_MST_ID);
+	uint16_t iout = 0;
+
+	I2CReadBytes(PMBUS_MST_ID, READ_IOUT, PMBUS_CMD_BYTE_SIZE, (uint8_t *)&iout,
+		     READ_IOUT_DATA_BYTE_SIZE, PMBUS_FLIP_BYTES);
+	return (iout & MPS_DIRECT_MASK) * MPS_IOUT_LSB_A;
+}
+
 /* The function returns the core power in W. */
 float GetVcorePower(void)
 {
 	I2CInit(I2CMst, P0V8_VCORE_ADDR, I2CFastMode, PMBUS_MST_ID);
+	uint16_t pout;
+
+	I2CReadBytes(PMBUS_MST_ID, READ_POUT, PMBUS_CMD_BYTE_SIZE, (uint8_t *)&pout,
+		     READ_POUT_DATA_BYTE_SIZE, PMBUS_FLIP_BYTES);
+	return ConvertLinear11ToFloat(pout);
+}
+
+/* The function returns the VCOREM rail power in W (MAX20816 READ_POUT). */
+float GetVcoremPower(void)
+{
+	I2CInit(I2CMst, P0V8_VCOREM_ADDR, I2CFastMode, PMBUS_MST_ID);
 	uint16_t pout;
 
 	I2CReadBytes(PMBUS_MST_ID, READ_POUT, PMBUS_CMD_BYTE_SIZE, (uint8_t *)&pout,

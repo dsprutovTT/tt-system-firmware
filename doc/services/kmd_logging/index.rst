@@ -133,6 +133,7 @@ Current Behavior Notes
 ----------------------
 
 - Firmware batches data and sends only when host is ready.
+- ``printk()`` output, including the boot banner, is not forwarded to KMD.
 - If host has not yet consumed the previous batch, firmware drops the pending
   local batch for forward progress.
 - If local staged data exceeds available host payload space, firmware truncates

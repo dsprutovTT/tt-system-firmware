@@ -8,6 +8,7 @@
 #include "vf_curve.h"
 #include "throttler.h"
 #include "aiclk_ppm.h"
+#include "rail_measure.h"
 #include "voltage.h"
 
 bool dvfs_enabled;
@@ -27,6 +28,11 @@ void DVFSChange(void)
 	DecreaseAiclk();
 	VoltageChange();
 	IncreaseAiclk();
+
+	/* Characterization-only rail sampling. Runs after the control path so its PMBus
+	 * traffic does not sit between the throttler inputs and the clock/voltage change.
+	 */
+	RailMeasureUpdate();
 }
 
 static void dvfs_work_handler(struct k_work *work)

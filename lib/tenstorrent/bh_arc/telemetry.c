@@ -30,6 +30,7 @@
 #include "fan_ctrl.h"
 #include "functional_efuse.h"
 #include "harvesting.h"
+#include "rail_measure.h"
 #include "reg.h"
 #include "regulator.h"
 #include "status_reg.h"
@@ -175,6 +176,21 @@ static struct telemetry_table telemetry_table = {
 		[72] = {TAG_NOP_ON_DURATION, TELEM_OFFSET(TAG_NOP_ON_DURATION)},
 		[73] = {TAG_FW_CAPABILITIES_0, TELEM_OFFSET(TAG_FW_CAPABILITIES_0)},
 		[74] = {TAG_FW_ACTIVE_CONFIG_0, TELEM_OFFSET(TAG_FW_ACTIVE_CONFIG_0)},
+		[75] = {TAG_SERDES_VDD_VOLTAGE, TELEM_OFFSET(TAG_SERDES_VDD_VOLTAGE)},
+		[76] = {TAG_SERDES_VDD_CURRENT, TELEM_OFFSET(TAG_SERDES_VDD_CURRENT)},
+		[77] = {TAG_SERDES_VDDL_VOLTAGE, TELEM_OFFSET(TAG_SERDES_VDDL_VOLTAGE)},
+		[78] = {TAG_SERDES_VDDL_CURRENT, TELEM_OFFSET(TAG_SERDES_VDDL_CURRENT)},
+		[79] = {TAG_SERDES_VDDH_VOLTAGE, TELEM_OFFSET(TAG_SERDES_VDDH_VOLTAGE)},
+		[80] = {TAG_SERDES_VDDH_CURRENT, TELEM_OFFSET(TAG_SERDES_VDDH_CURRENT)},
+		[81] = {TAG_VCOREM_VOLTAGE, TELEM_OFFSET(TAG_VCOREM_VOLTAGE)},
+		[82] = {TAG_VCOREM_CURRENT, TELEM_OFFSET(TAG_VCOREM_CURRENT)},
+		[83] = {TAG_GDDR_VDDR_VOLTAGE, TELEM_OFFSET(TAG_GDDR_VDDR_VOLTAGE)},
+		[84] = {TAG_GDDR_VDDR_CURRENT, TELEM_OFFSET(TAG_GDDR_VDDR_CURRENT)},
+		[85] = {TAG_GDDR_VDDA_EAST_VOLTAGE, TELEM_OFFSET(TAG_GDDR_VDDA_EAST_VOLTAGE)},
+		[86] = {TAG_GDDR_VDDA_EAST_CURRENT, TELEM_OFFSET(TAG_GDDR_VDDA_EAST_CURRENT)},
+		[87] = {TAG_GDDR_VDDA_WEST_VOLTAGE, TELEM_OFFSET(TAG_GDDR_VDDA_WEST_VOLTAGE)},
+		[88] = {TAG_GDDR_VDDA_WEST_CURRENT, TELEM_OFFSET(TAG_GDDR_VDDA_WEST_CURRENT)},
+		[89] = {TAG_VCOREM_POWER_POUT, TELEM_OFFSET(TAG_VCOREM_POWER_POUT)},
 	},
 };
 /* clang-format on */
@@ -260,6 +276,16 @@ void UpdateTelemetryKernelThrottler(bool enabled, uint32_t stop_nops_freq)
 	telemetry[TAG_KERNEL_THROTTLER] = (enabled ? 1U : 0U) | ((stop_nops_freq & 0xFFFFU) << 16U);
 }
 
+void UpdateTelemetryGddrThermTrip(bool enabled)
+{
+	telemetry_feature_flags_0_t active_config = {
+		.u32_all = telemetry[TAG_FW_ACTIVE_CONFIG_0],
+	};
+
+	active_config.bits.gddr_therm_trip = enabled ? 1U : 0U;
+	telemetry[TAG_FW_ACTIVE_CONFIG_0] = active_config.u32_all;
+}
+
 telemetry_feature_flags_bits_0_t GetActiveFeatures(void)
 {
 	telemetry_feature_flags_0_t active_config = {
@@ -292,7 +318,11 @@ static const struct device *const smbus_target_dev =
 
 static struct k_timer telem_update_timer;
 static struct k_work telem_update_worker;
-static int telem_update_interval = 100;
+static int telem_update_interval = TELEM_UPDATE_INTERVAL_DEFAULT_MS;
+/* Set once StartTelemetryTimer() has run. Guards against a host interval change arriving
+ * between init_telemetry() and StartTelemetryTimer() and starting the timer early.
+ */
+static bool telem_timer_started;
 
 static void UpdateEthTelemetry(void)
 {
@@ -473,12 +503,67 @@ static void write_static_telemetry(uint32_t app_version)
 	telemetry[TAG_GDDR_MRISC_NOC2AXI_PORT] = get_gddr_mrisc_endpoints();
 
 	fw_capabilities.bits.kernel_nops_at_aiclk_fmin = 1U;
+	fw_capabilities.bits.gddr_therm_trip = 1U;
 	telemetry[TAG_FW_CAPABILITIES_0] = fw_capabilities.u32_all;
 
 	active_config.bits.kernel_nops_at_aiclk_fmin =
 		tt_bh_fwtable_get_fw_table(fwtable_dev)
 			->feature_enable.kernel_throttler_at_floor_en;
+	active_config.bits.gddr_therm_trip =
+		tt_bh_fwtable_get_fw_table(fwtable_dev)->feature_enable.gddr_therm_trip_en;
 	telemetry[TAG_FW_ACTIVE_CONFIG_0] = active_config.u32_all;
+}
+
+/* Publish the rails the DVFS loop has been asked to measure. A rail that has never been
+ * sampled leaves its tags alone, so a disabled rail reads 0 and a rail that is turned off
+ * again holds its last sample.
+ */
+static void update_rail_telemetry(void)
+{
+	static const uint32_t rail_tags[TT_CHAR_RAIL_COUNT][2] = {
+		[TT_CHAR_RAIL_SERDES_VDD] = {TAG_SERDES_VDD_VOLTAGE, TAG_SERDES_VDD_CURRENT},
+		[TT_CHAR_RAIL_SERDES_VDDL] = {TAG_SERDES_VDDL_VOLTAGE, TAG_SERDES_VDDL_CURRENT},
+		[TT_CHAR_RAIL_SERDES_VDDH] = {TAG_SERDES_VDDH_VOLTAGE, TAG_SERDES_VDDH_CURRENT},
+		[TT_CHAR_RAIL_VCOREM] = {TAG_VCOREM_VOLTAGE, TAG_VCOREM_CURRENT},
+		[TT_CHAR_RAIL_GDDR_VDDR] = {TAG_GDDR_VDDR_VOLTAGE, TAG_GDDR_VDDR_CURRENT},
+		/* Dual rail: east uses [0]/ west handled below. */
+		[TT_CHAR_RAIL_GDDR_VDDA] = {TAG_GDDR_VDDA_EAST_VOLTAGE, TAG_GDDR_VDDA_EAST_CURRENT},
+	};
+
+	for (uint8_t rail = 0; rail < TT_CHAR_RAIL_COUNT; rail++) {
+		float voltage_mv;
+		float current_a;
+		float voltage_mv_2;
+		float current_a_2;
+
+		if (RailMeasureGetDual(rail, &voltage_mv, &current_a, &voltage_mv_2,
+				       &current_a_2)) {
+			telemetry[TAG_GDDR_VDDA_EAST_VOLTAGE] = voltage_mv;
+			telemetry[TAG_GDDR_VDDA_EAST_CURRENT] = ConvertFloatToTelemetry(current_a);
+			telemetry[TAG_GDDR_VDDA_WEST_VOLTAGE] = voltage_mv_2;
+			telemetry[TAG_GDDR_VDDA_WEST_CURRENT] =
+				ConvertFloatToTelemetry(current_a_2);
+			continue;
+		}
+
+		if (!RailMeasureGet(rail, &voltage_mv, &current_a)) {
+			continue;
+		}
+
+		/* voltage reported in mV, truncated to uint32_t */
+		telemetry[rail_tags[rail][0]] = voltage_mv;
+		/* current reported in A, in signed int 16.16 format */
+		telemetry[rail_tags[rail][1]] = ConvertFloatToTelemetry(current_a);
+
+		if (rail == TT_CHAR_RAIL_VCOREM) {
+			float power_pout_w;
+
+			if (RailMeasureGetPower(rail, &power_pout_w)) {
+				telemetry[TAG_VCOREM_POWER_POUT] =
+					ConvertFloatToTelemetry(power_pout_w);
+			}
+		}
+	}
 }
 
 static void update_telemetry(void)
@@ -572,6 +657,7 @@ static void update_telemetry(void)
 	telemetry[TAG_GDDR_WEST_IO_POWER] = telemetry_internal_data.gddr_io_power_west;
 	/* reported in W, truncated to uint32_t */
 	telemetry[TAG_GDDR_EAST_IO_POWER] = telemetry_internal_data.gddr_io_power_east;
+	update_rail_telemetry();
 	telemetry[TAG_NOP_START_COUNT] = GetStartNOPCount();
 	telemetry[TAG_NOP_ON_DURATION] = GetNOPOnDuration(telem_update_interval);
 	telemetry[TAG_TIMER_HEARTBEAT]++; /* Incremented every time the timer is called */
@@ -618,5 +704,35 @@ void StartTelemetryTimer(void)
 	 */
 	k_timer_start(&telem_update_timer, K_MSEC(telem_update_interval),
 		      K_MSEC(telem_update_interval));
+	telem_timer_started = true;
+}
+
+uint8_t TelemetrySetUpdateInterval(uint32_t interval_ms)
+{
+	if (interval_ms == 0) {
+		interval_ms = TELEM_UPDATE_INTERVAL_DEFAULT_MS;
+	} else if (interval_ms < TELEM_UPDATE_INTERVAL_MIN_MS ||
+		   interval_ms > TELEM_UPDATE_INTERVAL_MAX_MS) {
+		LOG_WRN("telemetry update interval %u ms rejected, must be 0 (restore default of "
+			"%d ms) or within [%d, %d] ms",
+			interval_ms, TELEM_UPDATE_INTERVAL_DEFAULT_MS, TELEM_UPDATE_INTERVAL_MIN_MS,
+			TELEM_UPDATE_INTERVAL_MAX_MS);
+		return 1;
+	}
+
+	telem_update_interval = interval_ms;
+	/* Report the new rate to readers of the telemetry table. */
+	telemetry[TAG_UPDATE_TELEM_SPEED] = telem_update_interval;
+
+	/* Restart the timer so the new period takes effect immediately. Before
+	 * StartTelemetryTimer() runs it will pick the value up on its own.
+	 */
+	if (telem_timer_started) {
+		k_timer_start(&telem_update_timer, K_MSEC(telem_update_interval),
+			      K_MSEC(telem_update_interval));
+	}
+
+	LOG_INF("telemetry update interval set to %d ms", telem_update_interval);
+	return 0;
 }
 #endif /* CONFIG_BH_FWTABLE */

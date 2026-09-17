@@ -1,0 +1,7 @@
+board:
+  name: tt_mmk
+  full_name: Tenstorrent MMK Board
+  vendor: tenstorrent
+  socs:
+    - name: tt_keraunos
+    - name: tt_mimir

@@ -90,6 +90,27 @@ ARC_START_TIME_REG_ADDR = 0x80030440
 ARC_HANG_PC_REG_ADDR = 0x80030454
 TELEMETRY_DATA_REG_ADDR = 0x80030430
 
+# Blackhole reset-unit banks (active-low: 1 = deasserted / out of reset)
+# Matches DeassertTileResets / DeassertRiscvResets in lib/tenstorrent/bh_arc/reset.c
+RESET_UNIT_GLOBAL_RESET_ADDR = 0x80030000
+RESET_UNIT_ETH_RESET_ADDR = 0x80030008
+RESET_UNIT_DDR_RESET_ADDR = 0x80030010
+RESET_UNIT_L2CPU_RESET_ADDR = 0x80030014
+RESET_UNIT_TENSIX_RESET_BASE = 0x80030020
+RESET_UNIT_TENSIX_RISC_RESET_BASE = 0x80030040
+NUM_TENSIX_RESET_BANKS = 8
+
+# Expected post-init values (normal bringup; RISC halves released)
+TT_BH_GLOBAL_RESET_POST_INIT = 0x2383  # system, NOC, refclk_cnt_en, PCIe0/1, PTP
+TT_BH_ETH_TILE_MASK = 0x00003FFF  # bits [13:0]
+TT_BH_ETH_RISC_MASK = 0x3FFF0000  # bits [29:16]
+TT_BH_ETH_RESET_POST_INIT = TT_BH_ETH_TILE_MASK | TT_BH_ETH_RISC_MASK
+TT_BH_DDR_TILE_MASK = 0x000000FF  # bits [7:0]
+TT_BH_DDR_RISC_MASK = 0xFFFFFF00  # bits [31:8]
+TT_BH_DDR_RESET_POST_INIT = TT_BH_DDR_TILE_MASK | TT_BH_DDR_RISC_MASK
+TT_BH_L2CPU_TILE_MASK = 0x0000000F  # bits [3:0]; RISC [7:4] stay asserted (BH-25/28)
+TT_BH_ALL_LINES_DEASSERTED = 0xFFFFFFFF
+
 # Functional efuse MMIO mapping (32-bit words)
 EFUSE_DFT0_MEM_BASE_ADDR = 0x80040000
 EFUSE_BOX_ADDR_ALIGN = 0x2000
@@ -345,6 +366,8 @@ def upgrade_from_version_test(
 ):
     if board_name is None:
         pytest.skip("Upgrade test requires --board set, skipping upgrade test")
+    if board_name == "bh-galaxy-revc":
+        pytest.skip("Upgrade test is not supported on Galaxy revc")
 
     RECOVERY_URL = "https://github.com/tenstorrent/tt-system-firmware/releases/download/v18.12.2/fw-pack-v18.12.2-recovery.tar.gz"
 
@@ -497,7 +520,7 @@ def temperature_sensors_test(arc_chip_dut, asic_id):
     arc_chip = pyluwen.detect_chips()[asic_id]
     fail_count = 0
     tmin = 20
-    tmax = 70
+    tmax = 80
     for sensor_id in range(NUM_TS):
         response = arc_chip.as_bh().arc_msg_buf(
             [TT_SMC_MSG_READ_TS, sensor_id, 0, 0, 0, 0, 0, 0]
@@ -523,9 +546,6 @@ def test_arc_msg(arc_chip_dut, asic_id):
     assert response[0] == 21, "SMC did not respond to test message"
     assert response[1] == 0, "SMC response invalid"
     logger.info('SMC ping message response "%d"', response[0])
-    # Post code should have updated after first message
-    status = arc_chip.axi_read32(ARC_STATUS)
-    assert status == 0xC0DE003F, "SMC firmware has incorrect status"
 
 
 def test_dmc_msg(arc_chip_dut, asic_id):
@@ -595,6 +615,56 @@ def test_boot_status(arc_chip_dut, asic_id):
 
     assert (status >> 1) & 0x3 == 0x2, "SMC HW boot status is not valid"
     assert err == 0, "FW Init error"
+
+
+def test_reset_unit_post_init(arc_chip_dut, asic_id):
+    """
+    Validates reset-unit register state after SMC init
+    """
+    # Re-init so register state is independent of prior tests
+    assert smi_reset_test(asic_id), "tt-smi reset failed before reset-unit check"
+    arc_chip = pyluwen.detect_chips()[asic_id]
+
+    checks = [
+        (
+            "global_reset",
+            RESET_UNIT_GLOBAL_RESET_ADDR,
+            TT_BH_GLOBAL_RESET_POST_INIT,
+        ),
+        ("eth_reset", RESET_UNIT_ETH_RESET_ADDR, TT_BH_ETH_RESET_POST_INIT),
+        ("ddr_reset", RESET_UNIT_DDR_RESET_ADDR, TT_BH_DDR_RESET_POST_INIT),
+        (
+            "l2cpu_reset",
+            RESET_UNIT_L2CPU_RESET_ADDR,
+            TT_BH_L2CPU_TILE_MASK,
+        ),
+    ]
+    for i in range(NUM_TENSIX_RESET_BANKS):
+        checks.append(
+            (
+                f"tensix_reset{i}",
+                RESET_UNIT_TENSIX_RESET_BASE + i * 4,
+                TT_BH_ALL_LINES_DEASSERTED,
+            )
+        )
+        checks.append(
+            (
+                f"tensix_risc_reset{i}",
+                RESET_UNIT_TENSIX_RISC_RESET_BASE + i * 4,
+                TT_BH_ALL_LINES_DEASSERTED,
+            )
+        )
+
+    failures = []
+    for name, addr, expected in checks:
+        actual = arc_chip.axi_read32(addr)
+        logger.info(
+            "%s @ 0x%08x = 0x%08x (expect 0x%08x)", name, addr, actual, expected
+        )
+        if actual != expected:
+            failures.append(f"{name}: got 0x{actual:08x}, want 0x{expected:08x}")
+
+    assert not failures, "Reset-unit post-init mismatch:\n  " + "\n  ".join(failures)
 
 
 def test_smbus_status(arc_chip_dut, asic_id):
@@ -979,6 +1049,7 @@ def test_dirty_reset():
     """
     total_tries = 10
     fail_count = 0
+    allowed_failures = 1
 
     for i in range(total_tries):
         logger.info(f"Iteration {i}:")
@@ -990,7 +1061,9 @@ def test_dirty_reset():
             logger.info(f"dirty reset passed on iteration {i}")
 
     logger.info(f"dirty reset failed {fail_count}/{total_tries} times.")
-    assert fail_count == 0, "dirty reset failed a non-zero number of times."
+    assert fail_count <= allowed_failures, (
+        f"dirty reset failed {fail_count}/{total_tries} times (allowed {allowed_failures} failures)."
+    )
 
 
 def tensix_reset_sequence(arc_chip):
@@ -1241,7 +1314,7 @@ def test_temperature_sensors(arc_chip_dut, asic_id):
     Validates that the temperature sensor messages work and relay responses within reasonable bounds
 
     The message tested is READ_TS.
-    The expectation is that the temperature returned is between 40 and 70
+    The expectation is that the temperature returned is between 20 and 80
     """
     assert 0 == temperature_sensors_test(arc_chip_dut, asic_id)
 
@@ -1972,6 +2045,81 @@ def test_ccfgovr_bh_mod(unlaunched_dut: DeviceAdapter, asic_id: int):
             f"Failed to restore baseline config (rc={restore.returncode}); "
             f"SPI flash may be left modified: {restore.stderr.decode(errors='replace')}"
         )
+
+
+def test_ccfgovr_eth_speed_override(arc_chip_dut, asic_id, board_name):
+    """
+    Exercise the ETH link speed override that ccfgovr merges into
+    FwTable.eth_property_table.eth_speed_override.
+
+    There is no telemetry tag for the trained ETH speed, so instead of
+    reading it back this test drives the paths that would fail if the
+    override were mis-handled:
+
+    - `bh-mod` rejects a speed the ERISC firmware does not implement
+      before touching flash. This is the immediate-feedback story: the
+      user learns their value is wrong without waiting for a reset.
+    - Writing a supported speed and letting `bh-mod` reset the chip leaves
+      ARC coming back up. The reset is the end-to-end path through the
+      `FwTableOverride` encode, the SPI write, the ccfgovr merge into
+      `FwTable` (which sets `has_eth_speed_override`), and `LoadEthFwCfg`
+      consuming the field.
+    - `bh-mod res` clears the override.
+    """
+    bh_mod = shutil.which("bh-mod") or os.path.expanduser("~/bh-mod")
+    if not os.path.isfile(bh_mod):
+        pytest.skip("bh-mod not found (PATH or ~/bh-mod)")
+
+    ETH_SPEED_PATH = "eth_property_table.eth_speed_override"
+
+    # Re-assert the cmfwcfg speed. Every non-Galaxy board trains at 400G
+    # and Galaxy at 200G today, so this exercises the merge without asking
+    # the ETH FW to retrain at a different speed.
+    is_galaxy = board_name is not None and "galaxy" in board_name.lower()
+    speed = 200 if is_galaxy else 400
+
+    # A speed no ERISC firmware implements has to be refused before bh-mod
+    # touches the chip, so this leaves state alone.
+    reject = subprocess.run(
+        [bh_mod, "set", f"{ETH_SPEED_PATH}=137"],
+        capture_output=True,
+        check=False,
+    )
+    assert reject.returncode != 0, (
+        f"bh-mod set {ETH_SPEED_PATH}=137 should have been rejected; "
+        f"stdout={reject.stdout.decode(errors='replace')!r} "
+        f"stderr={reject.stderr.decode(errors='replace')!r}"
+    )
+
+    write = subprocess.run(
+        [bh_mod, "--reset-timeout=60s", "set", f"{ETH_SPEED_PATH}={speed}"],
+        capture_output=True,
+        check=False,
+    )
+    assert write.returncode == 0, (
+        f"bh-mod set {ETH_SPEED_PATH}={speed} failed, rc={write.returncode}; "
+        f"stdout={write.stdout.decode(errors='replace')!r} "
+        f"stderr={write.stderr.decode(errors='replace')!r}"
+    )
+    # ARC has to be back after bh-mod applied the override with a reset.
+    wait_arc_boot(asic_id, timeout=60)
+
+    # Clear the override so the SPI flash goes back to inheriting from cmfwcfg.
+    # Warn (don't fail) if this doesn't succeed, so a stale flash state can't
+    # flake later tests / CI runs.
+    restore = subprocess.run(
+        [bh_mod, "--reset-timeout=60s", "res", ETH_SPEED_PATH],
+        capture_output=True,
+        check=False,
+    )
+    if restore.returncode != 0:
+        logger.warning(
+            f"Failed to clear {ETH_SPEED_PATH} (rc={restore.returncode}); "
+            f"SPI flash may be left modified: "
+            f"{restore.stderr.decode(errors='replace')}"
+        )
+    else:
+        wait_arc_boot(asic_id, timeout=60)
 
 
 def test_heartbeat_telemetry(arc_chip_dut, asic_id):

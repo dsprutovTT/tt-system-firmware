@@ -5,8 +5,12 @@
 #   - bh_arc_mission: mission-only sources, built only for non-recovery images.
 #     It is layered on top of bh_arc_recovery.
 
+set(TT_BLACKHOLE_SOC_DIR ${ZEPHYR_CURRENT_MODULE_DIR}/soc/tenstorrent/tt_blackhole)
+
 zephyr_library_named(bh_arc_recovery)
 zephyr_library_include_directories_ifdef(CONFIG_TT_BH_ARC ${ZEPHYR_CURRENT_MODULE_DIR}/include)
+# status_reg.h lives with the Blackhole SoC (also needed on native_sim EMUL).
+zephyr_library_include_directories(${TT_BLACKHOLE_SOC_DIR}/include)
 
 if(EXISTS ${APPLICATION_SOURCE_DIR}/VERSION)
   zephyr_library_compile_definitions(HAS_APP_VERSION=1)
@@ -29,7 +33,6 @@ zephyr_library_sources(
   pcie.c
   pcie_msi.c
   pll.c
-  post_code.c
   reset.c
   smbus_target.c
   spi_eeprom.c
@@ -39,10 +42,7 @@ zephyr_library_sources(
 # zephyr-keep-sorted-stop
 )
 
-zephyr_library_sources_ifdef(CONFIG_TT_BH_ARC_MSGQUEUE_ENABLED msgqueue.c)
-
 zephyr_library_sources_ifdef(CONFIG_TT_BH_ARC_RUNTIME_TELEMETRY runtime_telemetry.c)
-zephyr_library_sources_ifdef(CONFIG_TT_BH_ARC_EMUL reg_stub.c)
 
 # Backend for the chip-info service: the static (no-SPI) one when fwtable is
 # unavailable (recovery), the fwtable-backed one (bh_arc_mission) otherwise.
@@ -57,7 +57,6 @@ endif()
 
 zephyr_library_sources_ifdef(CONFIG_TT_PCIE_LOG_BACKEND tt_pcie_log.c)
 
-zephyr_linker_sources(DATA_SECTIONS iterables.ld)
 if(CONFIG_ARC)
   zephyr_library_link_libraries(${ZEPHYR_CURRENT_MODULE_DIR}/zephyr/blobs/tt_blackhole_libpciesd.a)
 endif()
@@ -65,6 +64,7 @@ endif()
 if(NOT CONFIG_TT_SMC_RECOVERY)
   zephyr_library_named(bh_arc_mission)
   zephyr_library_include_directories_ifdef(CONFIG_TT_BH_ARC ${ZEPHYR_CURRENT_MODULE_DIR}/include)
+  zephyr_library_include_directories(${TT_BLACKHOLE_SOC_DIR}/include)
 
   zephyr_library_sources(
     aiclk_ppm.c
@@ -80,6 +80,7 @@ if(NOT CONFIG_TT_SMC_RECOVERY)
     i2c_messages.c
     pcie_dma.c
     pvt.c
+    rail_measure.c
     regulator.c
     regulator_config.c
     serdes_eth.c

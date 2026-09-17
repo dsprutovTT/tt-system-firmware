@@ -5,7 +5,9 @@
  */
 
 #include "aiclk_ppm.h"
+#include "cat.h"
 #include "dvfs.h"
+#include "rail_measure.h"
 #include "telemetry.h"
 #include "throttler.h"
 #include "voltage.h"
@@ -536,6 +538,21 @@ static uint8_t characterisation_handler(const union request *request, struct res
 	case TT_SUB_MSG_SET_KERNEL_THROTTLER_STOP_NOPS_FREQ:
 		return ThrottlerSetKernelThrottlerStopFreq(
 			request->characterisation_msg.submsg_data.throttler_stop_freq.frequency);
+
+	case TT_SUB_MSG_SET_GDDR_THERM_TRIP_ENABLED:
+		return CatSetGddrThermTripEnabled(
+			request->characterisation_msg.submsg_data.gddr_therm_trip_enabled.enabled);
+
+	case TT_SUB_MSG_SET_RAIL_MEASUREMENT:
+		return RailMeasureSetEnabled(
+			request->characterisation_msg.submsg_data.rail_measurement.rail_id,
+			request->characterisation_msg.submsg_data.rail_measurement.enable);
+
+#ifdef CONFIG_BH_FWTABLE
+	case TT_SUB_MSG_SET_TELEMETRY_UPDATE_INTERVAL:
+		return TelemetrySetUpdateInterval(
+			request->characterisation_msg.submsg_data.telemetry_interval.interval_ms);
+#endif
 
 	default:
 		LOG_WRN("Unknown characterization submessage ID: 0x%02x",

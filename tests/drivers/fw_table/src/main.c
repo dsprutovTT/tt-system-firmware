@@ -46,6 +46,8 @@ static const struct device *const fwtable_dev = DEVICE_DT_GET(FWTABLE_NODE);
 #define FD_AREA_ERASE_SIZE 0x1000U
 
 #define DEFAULT_TDP_LIMIT 150U
+/* Stands in for a cmfwcfg that pins the link speed, as the Galaxy tables do. */
+#define DEFAULT_ETH_SPEED 200U
 
 static void write_fd(size_t slot, const char *tag, uint32_t spi_addr, uint32_t image_size)
 {
@@ -59,20 +61,14 @@ static void write_fd(size_t slot, const char *tag, uint32_t spi_addr, uint32_t i
 
 	int rc = flash_write(flash_dev, TT_BOOT_FS_FD_HEAD_ADDR + slot * sizeof(fd), &fd,
 			     sizeof(fd));
-	zassert_equal(rc, 0, "flash_write failed with %d", slot, rc);
+	zassert_equal(rc, 0, "flash_write of fd slot %zu failed with %d", slot, rc);
 }
 
-static size_t encode_tdp_limit_override(uint8_t *out, size_t out_size, uint32_t value)
+static size_t encode_override(const FwTableOverride *ovr, uint8_t *out, size_t out_size)
 {
-	FwTableOverride ovr = FwTableOverride_init_zero;
-
-	ovr.has_chip_limits = true;
-	ovr.chip_limits.has_tdp_limit = true;
-	ovr.chip_limits.tdp_limit = value;
-
 	pb_ostream_t stream = pb_ostream_from_buffer(out, out_size);
 
-	zassert_true(pb_encode_ex(&stream, FwTableOverride_fields, &ovr, PB_ENCODE_NULLTERMINATED),
+	zassert_true(pb_encode_ex(&stream, FwTableOverride_fields, ovr, PB_ENCODE_NULLTERMINATED),
 		     "pb_encode_ex failed: %s", PB_GET_ERROR(&stream));
 
 	size_t total = stream.bytes_written;
@@ -83,6 +79,17 @@ static size_t encode_tdp_limit_override(uint8_t *out, size_t out_size, uint32_t 
 		out[total++] = 0x00U;
 	}
 	return total;
+}
+
+static size_t encode_tdp_limit_override(uint8_t *out, size_t out_size, uint32_t value)
+{
+	FwTableOverride ovr = FwTableOverride_init_zero;
+
+	ovr.has_chip_limits = true;
+	ovr.chip_limits.has_tdp_limit = true;
+	ovr.chip_limits.tdp_limit = value;
+
+	return encode_override(&ovr, out, out_size);
 }
 
 static size_t encode_kernel_throttler_override(uint8_t *out, size_t out_size, bool enabled,
@@ -98,19 +105,29 @@ static size_t encode_kernel_throttler_override(uint8_t *out, size_t out_size, bo
 	ovr.chip_limits.has_kernel_throttler_stop_nops_freq = true;
 	ovr.chip_limits.kernel_throttler_stop_nops_freq = stop_freq;
 
-	pb_ostream_t stream = pb_ostream_from_buffer(out, out_size);
+	return encode_override(&ovr, out, out_size);
+}
 
-	zassert_true(pb_encode_ex(&stream, FwTableOverride_fields, &ovr, PB_ENCODE_NULLTERMINATED),
-		     "pb_encode_ex failed: %s", PB_GET_ERROR(&stream));
+static size_t encode_eth_speed_override(uint8_t *out, size_t out_size, uint32_t speed)
+{
+	FwTableOverride ovr = FwTableOverride_init_zero;
 
-	size_t total = stream.bytes_written;
+	ovr.has_eth_property_table = true;
+	ovr.eth_property_table.has_eth_speed_override = true;
+	ovr.eth_property_table.eth_speed_override = speed;
 
-	/* Pad to 4 byte alignment for ccfgovr header requirement */
-	while ((total % 4U) != 0U) {
-		zassert_true(total < out_size, "padded body overruns buffer");
-		out[total++] = 0x00U;
-	}
-	return total;
+	return encode_override(&ovr, out, out_size);
+}
+
+static size_t encode_gddr_therm_trip_override(uint8_t *out, size_t out_size, bool enabled)
+{
+	FwTableOverride ovr = FwTableOverride_init_zero;
+
+	ovr.has_feature_enable = true;
+	ovr.feature_enable.has_gddr_therm_trip_en = true;
+	ovr.feature_enable.gddr_therm_trip_en = enabled;
+
+	return encode_override(&ovr, out, out_size);
 }
 
 static void write_bank(uint32_t addr, struct ccfgovr_bank_hdr *hdr, const uint8_t *body,
@@ -156,6 +173,8 @@ static void reset_fwtable(void)
 
 	memset(t, 0, sizeof(*t));
 	t->chip_limits.tdp_limit = DEFAULT_TDP_LIMIT;
+	t->eth_property_table.has_eth_speed_override = true;
+	t->eth_property_table.eth_speed_override = DEFAULT_ETH_SPEED;
 }
 
 /**
@@ -200,6 +219,9 @@ ZTEST(bh_fwtable_ccfgovr, test_happy_path_active_bank_applies)
 	tt_bh_fwtable_apply_ccfgovr(fwtable_dev);
 	zassert_equal(tt_bh_fwtable_get_fw_table(fwtable_dev)->chip_limits.tdp_limit, 175,
 		      "expected override to set tdp_limit=175");
+	zassert_equal(
+		tt_bh_fwtable_get_fw_table(fwtable_dev)->eth_property_table.eth_speed_override,
+		DEFAULT_ETH_SPEED, "fields absent from the override must keep their cmfwcfg value");
 }
 
 /**
@@ -220,6 +242,63 @@ ZTEST(bh_fwtable_ccfgovr, test_kernel_throttler_override_applies)
 	zassert_equal(tt_bh_fwtable_get_fw_table(fwtable_dev)
 			      ->chip_limits.kernel_throttler_stop_nops_freq,
 		      800U, "expected override to set kernel_throttler_stop_nops_freq=800");
+}
+
+/**
+ * @brief Test that the GDDR thermal-trip action feature can be overridden
+ */
+ZTEST(bh_fwtable_ccfgovr, test_gddr_therm_trip_override_applies)
+{
+	uint8_t body[16];
+	size_t body_len = encode_gddr_therm_trip_override(body, sizeof(body), true);
+	struct ccfgovr_bank_hdr hdr = {.magic = CCFGOVR_MAGIC, .seq = 2};
+
+	write_bank(BANK_A_ADDR, &hdr, body, body_len);
+
+	tt_bh_fwtable_apply_ccfgovr(fwtable_dev);
+	zassert_true(tt_bh_fwtable_get_fw_table(fwtable_dev)->feature_enable.gddr_therm_trip_en,
+		     "expected override to enable gddr_therm_trip_en");
+}
+
+/**
+ * @brief Test that the ETH training speed can be raised above the cmfwcfg value
+ */
+ZTEST(bh_fwtable_ccfgovr, test_eth_speed_override_applies)
+{
+	uint8_t body[16];
+	size_t body_len = encode_eth_speed_override(body, sizeof(body), 400U);
+	struct ccfgovr_bank_hdr hdr = {.magic = CCFGOVR_MAGIC, .seq = 2};
+
+	write_bank(BANK_A_ADDR, &hdr, body, body_len);
+
+	tt_bh_fwtable_apply_ccfgovr(fwtable_dev);
+	zassert_equal(
+		tt_bh_fwtable_get_fw_table(fwtable_dev)->eth_property_table.eth_speed_override,
+		400U, "expected override to set eth_speed_override=400");
+}
+
+/**
+ * @brief Test that a speed of 0 overrides the cmfwcfg speed and asks for auto-train
+ *
+ * Both the override and the base fw table are `optional`, so an explicit 0
+ * survives the merge with `has_eth_speed_override` set. `LoadEthFwCfg` writes
+ * 0 into the ETH FW config, which hands the speed choice back to ERISC.
+ */
+ZTEST(bh_fwtable_ccfgovr, test_eth_speed_override_of_zero_asks_for_auto_train)
+{
+	uint8_t body[16];
+	size_t body_len = encode_eth_speed_override(body, sizeof(body), 0U);
+	struct ccfgovr_bank_hdr hdr = {.magic = CCFGOVR_MAGIC, .seq = 2};
+
+	write_bank(BANK_A_ADDR, &hdr, body, body_len);
+
+	tt_bh_fwtable_apply_ccfgovr(fwtable_dev);
+	zassert_true(
+		tt_bh_fwtable_get_fw_table(fwtable_dev)->eth_property_table.has_eth_speed_override,
+		"expected the override to set has_eth_speed_override");
+	zassert_equal(
+		tt_bh_fwtable_get_fw_table(fwtable_dev)->eth_property_table.eth_speed_override, 0U,
+		"expected the override to set eth_speed_override=0 (auto)");
 }
 
 /**

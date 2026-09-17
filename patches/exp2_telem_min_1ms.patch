@@ -1,0 +1,11 @@
+--- a/lib/tenstorrent/bh_arc/telemetry.h
++++ b/lib/tenstorrent/bh_arc/telemetry.h
+@@ -583,7 +583,7 @@
+  * The telemetry pass shares the system work queue with the 1 ms DVFS loop, so the interval is
+  * floored well above 1 ms to keep telemetry from crowding out frequency and voltage control.
+  */
+-#define TELEM_UPDATE_INTERVAL_MIN_MS 10
++#define TELEM_UPDATE_INTERVAL_MIN_MS 1
+ 
+ /** @brief Longest accepted telemetry update interval in milliseconds. */
+ #define TELEM_UPDATE_INTERVAL_MAX_MS 1000

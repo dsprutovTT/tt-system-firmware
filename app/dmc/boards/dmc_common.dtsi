@@ -6,6 +6,7 @@
 
 #include <zephyr/dt-bindings/gpio/gpio.h>
 #include <zephyr/dt-bindings/i2c/i2c.h>
+#include <tenstorrent/tt_bh_reset_emul.dtsi>
 
 / {
 	aliases {
@@ -58,6 +59,12 @@
 		status = "okay";
 	};
 
+	msgqueue_info: scratch-reg@8003042c {
+		compatible = "tenstorrent,scratch-reg";
+		reg = <0x8003042c 0x4>;
+		status = "okay";
+	};
+
 	chip0: chip0 {
 		compatible = "tenstorrent,bh-chip";
 
@@ -72,33 +79,33 @@
 			port-write-cycles = <2>;
 		};
 
+		/* Line to asic reset */
 		asic_reset {
 			compatible = "zephyr,gpio-line";
-			label = "Line to asic reset";
 			gpios = <&emul_gpio 0 GPIO_ACTIVE_LOW>;
 		};
 
+		/* Line to spi reset */
 		spi_reset {
 			compatible = "zephyr,gpio-line";
-			label = "Line to spi reset";
 			gpios = <&emul_gpio 1 GPIO_ACTIVE_LOW>;
 		};
 
+		/* Power good indicator */
 		pgood {
 			compatible = "zephyr,gpio-line";
-			label = "Power good indicator";
 			gpios = <&emul_gpio 3 GPIO_PULL_DOWN>;
 		};
 
+		/* Thermal trip indicator */
 		therm_trip {
 			compatible = "zephyr,gpio-line";
-			label = "Thermal trip indicator";
 			gpios = <&emul_gpio 2 GPIO_ACTIVE_HIGH>;
 		};
 
+		/* Line to spi mux */
 		spi_mux {
 			compatible = "zephyr,gpio-line";
-			label = "Line to spi mux";
 			gpios = <&emul_gpio 4 GPIO_ACTIVE_LOW>;
 		};
 
@@ -111,27 +118,27 @@
 		primary = <0>;
 	};
 
+	/* Input from PCIe card edge triggering an asic reset */
 	preset_trigger {
 		compatible = "zephyr,gpio-line";
-		label = "Input from PCIe card edge triggering an asic reset";
 		gpios = <&emul_gpio 5 GPIO_ACTIVE_LOW>;
 	};
 
+	/* PSU Sense 0 from 12V-2x6 connector */
 	psu_sense0 {
 		compatible = "zephyr,gpio-line";
-		label = "PSU Sense 0 from 12V-2x6 connector";
 		gpios = <&emul_gpio 6 GPIO_ACTIVE_HIGH>;
 	};
 
+	/* PSU Sense 1 from 12V-2x6 connector */
 	psu_sense1 {
 		compatible = "zephyr,gpio-line";
-		label = "PSU Sense 1 from 12V-2x6 connector";
 		gpios = <&emul_gpio 7 GPIO_ACTIVE_HIGH>;
 	};
 
+	/* LED Output to board fault indicator */
 	board_fault_led {
 		compatible = "zephyr,gpio-line";
-		label = "LED Output to board fault indicator";
 		gpios = <&emul_gpio 8 GPIO_ACTIVE_HIGH>;
 	};
 

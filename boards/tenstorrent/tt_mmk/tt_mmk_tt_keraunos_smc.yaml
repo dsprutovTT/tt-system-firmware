@@ -1,0 +1,14 @@
+identifier: tt_mmk/tt_keraunos/smc
+name: Tenstorrent MMK Keraunos SMC
+type: mcu
+arch: riscv
+toolchain:
+  - zephyr
+ram: 1048576
+testing:
+  ignore_tags:
+    - net
+    - bluetooth
+supported:
+  - gpio
+vendor: tenstorrent

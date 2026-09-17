@@ -394,6 +394,30 @@ void tt_bh_fwtable_apply_ccfgovr(const struct device *dev)
 				ovr.feature_enable.kernel_throttler_at_floor_en;
 		}
 
+		if (ovr.has_dram_table && ovr.dram_table.has_soft_harvest_dram_mask) {
+			LOG_INF("CCFGOVR override: dram_table.soft_harvest_dram_mask = 0x%x",
+				ovr.dram_table.soft_harvest_dram_mask);
+			data->fw_table.dram_table.soft_harvest_dram_mask =
+				ovr.dram_table.soft_harvest_dram_mask;
+			data->fw_table.has_dram_table = true;
+		}
+
+		if (ovr.has_feature_enable && ovr.feature_enable.has_gddr_therm_trip_en) {
+			LOG_INF("CCFGOVR override: feature_enable.gddr_therm_trip_en = %u",
+				ovr.feature_enable.gddr_therm_trip_en);
+			data->fw_table.feature_enable.gddr_therm_trip_en =
+				ovr.feature_enable.gddr_therm_trip_en;
+		}
+
+		if (ovr.has_eth_property_table && ovr.eth_property_table.has_eth_speed_override) {
+			LOG_INF("CCFGOVR override: eth_property_table.eth_speed_override = %u",
+				ovr.eth_property_table.eth_speed_override);
+			data->fw_table.eth_property_table.eth_speed_override =
+				ovr.eth_property_table.eth_speed_override;
+			data->fw_table.eth_property_table.has_eth_speed_override = true;
+			data->fw_table.has_eth_property_table = true;
+		}
+
 		return;
 	}
 

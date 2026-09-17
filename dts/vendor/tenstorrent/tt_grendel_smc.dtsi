@@ -49,7 +49,7 @@
 			compatible = "sifive,rocket0", "riscv";
 			device_type = "cpu";
 			mmu-type = "riscv,sv48";
-			reg = <0x0>;
+			reg = <0x1>;
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "m", "a", "f", "d", "c", "zicond", "zicsr",
 					       "zifencei", "zihpm", "xrocket";
@@ -68,7 +68,7 @@
 			compatible = "sifive,rocket0", "riscv";
 			device_type = "cpu";
 			mmu-type = "riscv,sv48";
-			reg = <0x0>;
+			reg = <0x2>;
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "m", "a", "f", "d", "c", "zicond", "zicsr",
 					       "zifencei", "zihpm", "xrocket";
@@ -87,7 +87,7 @@
 			compatible = "sifive,rocket0", "riscv";
 			device_type = "cpu";
 			mmu-type = "riscv,sv48";
-			reg = <0x0>;
+			reg = <0x3>;
 			riscv,isa-base = "rv64i";
 			riscv,isa-extensions = "m", "a", "f", "d", "c", "zicond", "zicsr",
 					       "zifencei", "zihpm", "xrocket";
@@ -332,6 +332,13 @@
 			interrupt-parent = <&plic>;
 			channel-pairs = <32>;
 			#mbox-cells = <1>;
+		};
+
+		/* To be overridden by board */
+		msgqueue_info: scratch-reg@8003042c {
+			compatible = "tenstorrent,scratch-reg";
+			reg = <0x0 0x8003042c 0x0 0x4>;
+			status = "disabled";
 		};
 	};
 };

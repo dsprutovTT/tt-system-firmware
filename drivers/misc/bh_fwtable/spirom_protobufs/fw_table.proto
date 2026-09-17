@@ -37,6 +37,9 @@ message FwTable {
     uint32 additional_board_power = 15;
     uint32 max_tdp_limit = 16;
     uint32 kernel_throttler_stop_nops_freq = 17;
+    uint32 gddr_therm_trip_temp = 18;
+    uint32 gddr_therm_trip_critical_temp = 19;
+    uint32 gddr_therm_trip_duration_min = 20;
   }
 
   message FeatureEnable {
@@ -50,6 +53,7 @@ message FwTable {
     bool fan_ctrl_en = 8;
     bool doppler_en = 9;
     bool kernel_throttler_at_floor_en = 10;
+    bool gddr_therm_trip_en = 11;
   }
 
   message FanTable{
@@ -62,6 +66,7 @@ message FwTable {
   message DramTable {
     uint32 dram_mask = 1;
     bool dram_mask_en = 2;
+    uint32 soft_harvest_dram_mask = 3;
   }
 
   message ChipHarvestingTable {
@@ -88,7 +93,13 @@ message FwTable {
   message EthPropertyTable {
     uint32 eth_disable_mask = 1;
     bool eth_disable_mask_en = 2;
-    uint32 eth_speed_override = 3;
+    /*
+     * Link speed in Gbps. Optional so `has_eth_speed_override` distinguishes
+     * "table names no speed, use the ETH FW config image default (currently
+     * 400G, not 0)" from an explicit 0, which reaches ERISC as its
+     * auto-train sentinel.
+     */
+    optional uint32 eth_speed_override = 3;
   }
 
   message ProductSpecHarvesting {

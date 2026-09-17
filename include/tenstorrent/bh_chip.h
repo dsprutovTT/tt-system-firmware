@@ -28,6 +28,7 @@ struct bh_chip_config {
 	struct gpio_dt_spec asic_reset;
 	struct gpio_dt_spec spi_reset;
 	struct gpio_dt_spec spi_mux;
+	struct gpio_dt_spec spi_mux1;
 	struct gpio_dt_spec pgood;
 	struct gpio_dt_spec therm_trip;
 	const struct device *flash;
@@ -118,6 +119,13 @@ struct bh_chip {
 #define BH_CHIP_COUNT                          DT_PROP_LEN_OR(DT_PATH(chips), chips, 0)
 extern struct bh_chip BH_CHIPS[BH_CHIP_COUNT];
 
+#if BH_CHIP_COUNT > 0
+#define ARRAY_FOR_EACH_BH_CHIP(chip) ARRAY_FOR_EACH_PTR(BH_CHIPS, chip)
+#else
+#define ARRAY_FOR_EACH_BH_CHIP(chip)                                                               \
+	for (struct bh_chip * (chip) = NULL; (chip) != NULL; (chip) = NULL)
+#endif
+
 #define MAKE_STRUCT_FIELD(n) .n
 
 #define INIT_STRAP(n) MAKE_STRUCT_FIELD(DT_NODE_FULL_NAME_TOKEN(n)) = GPIO_DT_SPEC_GET(n, gpios),
@@ -140,6 +148,9 @@ extern struct bh_chip BH_CHIPS[BH_CHIP_COUNT];
 			.spi_mux = GPIO_DT_SPEC_GET(                                               \
 				DT_PHANDLE_OR_CHILD(DT_PHANDLE_BY_IDX(n, prop, idx), spi_mux),     \
 				gpios),                                                            \
+			.spi_mux1 = GPIO_DT_SPEC_GET_OR(                                           \
+				DT_PHANDLE_OR_CHILD(DT_PHANDLE_BY_IDX(n, prop, idx), spi_mux1),    \
+				gpios, {0}),                                                       \
 			.pgood = GPIO_DT_SPEC_GET(                                                 \
 				DT_PHANDLE_OR_CHILD(DT_PHANDLE_BY_IDX(n, prop, idx), pgood),       \
 				gpios),                                                            \

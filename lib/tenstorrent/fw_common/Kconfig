@@ -1,0 +1,42 @@
+# Copyright (c) 2026 Tenstorrent AI ULC
+# SPDX-License-Identifier: Apache-2.0
+
+config TT_FW_COMMON
+	bool "Tenstorrent common firmware library"
+	help
+	  Portable firmware helpers shared across Tenstorrent SMC products
+	  (e.g. Blackhole and Grendel).
+
+if TT_FW_COMMON
+
+config TT_FW_COMMON_EMUL
+	bool "fw_common MMIO emulation"
+	default y if BOARD_NATIVE_SIM
+	help
+	  Provide non-inline ReadReg/WriteReg stubs (reg_stub.c) for
+	  host/native builds. Selected by TT_BH_ARC_EMUL when Blackhole
+	  ARC emulation is enabled.
+
+config TT_POST_CODE
+	bool
+	default y if BOARD_TT_BLACKHOLE
+	help
+	  Enables writing firmware post codes to the status scratch register.
+
+config TT_MSGQUEUE
+	bool "Enable host message queue"
+	default y
+	help
+	  Enable the portable SMC host message queue implementation.
+
+config TT_MSGQUEUE_NUM_MSG_CODES
+	int "Number of message codes"
+	default 202
+	depends on TT_MSGQUEUE
+	help
+	  Size of the message handler table (message code range). Must be greater
+	  than the largest code in enum tt_smc_msg (currently
+	  TT_SMC_MSG_RECALIBRATE_CLK_STRETCHER = 0xC9); msgqueue.c silently drops
+	  handler registrations at or above this bound.
+
+endif

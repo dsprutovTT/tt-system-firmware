@@ -14,7 +14,7 @@ git clone git@yyz-gitlab.local.tenstorrent.com:syseng-platform/vdk-utils.git
 git clone git@yyz-gitlab.local.tenstorrent.com:tensix/tensix-hw/tt_smc.git
 
 cd vdk-utils
-TWISTER_DIR=$OUTDIR/tt_mimir_tt_mimir_smc/zephyr
+TWISTER_DIR=$(ls -d "$OUTDIR"/tt_mimir_tt_mimir_smc/zephyr* 2>/dev/null | head -n1)
 ZEPHYR_ELF=$TWISTER_DIR/tt-system-firmware/tests/drivers/tt_smc_remoteproc/
 ZEPHYR_ELF+=drivers.tt_smc_remoteproc.bl1_primary/tt_smc_remoteproc/zephyr/zephyr.elf
 PROD_ROM_ELF=../tt_smc/firmware/prod_rom-1.1.1-20260117-794e39bc/build/release/bin/prod_rom.elf

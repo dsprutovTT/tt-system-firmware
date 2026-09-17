@@ -1,0 +1,27 @@
+# Copyright (c) 2026 Tenstorrent AI ULC
+# SPDX-License-Identifier: Apache-2.0
+
+if BOARD_TT_MMK
+
+config SYS_CLOCK_TICKS_PER_SEC
+	default 1000
+
+config SYS_CLOCK_HW_CYCLES_PER_SEC
+	default 1000000
+
+if LOG
+
+# Do not enable Tenstorrent virtual logging backend by default on MMK.
+# MMK/Keraunos should use UART_TT_VIRT + shell unless an app explicitly opts in.
+config LOG_BACKEND_TT_VIRT
+	bool
+	default n
+
+# Use immediate logging mode, otherwise logs will often be lost in simulation
+choice LOG_MODE
+	default LOG_MODE_IMMEDIATE
+endchoice
+
+endif
+
+endif # BOARD_TT_MMK

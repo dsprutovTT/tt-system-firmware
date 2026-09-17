@@ -329,6 +329,12 @@ static void backend_process(const struct log_backend *const backend, union log_m
 	uint32_t entry_start_pos;
 	uint32_t message_start_pos;
 
+	/* Do not forward LOG_RAW or printk output to the host. */
+	if (log_msg_get_level(&msg->log) == LOG_LEVEL_NONE &&
+	    log_msg_get_source(&msg->log) == NULL) {
+		return;
+	}
+
 	/* Lock mutex to prevent collision with flush timer */
 	if (k_mutex_lock(&buffer_mutex, K_MSEC(10)) != 0) {
 		/* Timeout - drop this data */
@@ -378,6 +384,12 @@ static void backend_process(const struct log_backend *const backend, union log_m
 	uint16_t total_size_u16 = (uint16_t)total_size;
 
 	memcpy(framed_log_buffer + entry_start_pos, &total_size_u16, sizeof(total_size_u16));
+
+	/* Push error-level logs to host immediately */
+	if (entry_header.log_level == LOG_LEVEL_ERR) {
+		flush_buffer_to_host();
+	}
+
 	k_mutex_unlock(&buffer_mutex);
 }
 

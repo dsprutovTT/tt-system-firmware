@@ -1,0 +1,13 @@
+# Copyright (c) 2026 Tenstorrent AI ULC
+# SPDX-License-Identifier: Apache-2.0
+
+# Keraunos SMC quad-core RISC-V based on tenstorrent-rocketcore
+config SOC_TT_KERAUNOS_SMC
+	bool
+	select SOC_FAMILY_TT_GRENDEL
+	select TT_GRENDEL_SMC
+	help
+	  Tenstorrent KERAUNOS System Management Controller (SMC)
+
+config SOC
+	default "tt_keraunos" if SOC_TT_KERAUNOS_SMC

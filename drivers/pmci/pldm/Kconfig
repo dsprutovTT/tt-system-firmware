@@ -1,0 +1,32 @@
+# Copyright (c) 2026 Tenstorrent AI ULC
+# SPDX-License-Identifier: Apache-2.0
+
+config PMCI_PLDM_PLATFORM
+	bool "Enable PLDM Platform support"
+	depends on PLDM && SENSOR_ASYNC_API
+	default y
+	help
+	  Enable PLDM Platform command handling and PDR repository support.
+
+config PMCI_PLDM_OEM
+	bool "Enable PLDM OEM support"
+	depends on PLDM
+	help
+	  Enable PLDM OEM support. OEM functionality must be provided by a compatible
+	  device implementing the PLDM OEM handler API.
+
+config PMCI_PLDM_BASE
+	bool "Enable PLDM Base support"
+	depends on PLDM
+	help
+	  Enable PLDM BASE support
+
+config TT_PMCI_PLDM_SHELL
+	bool "Enable PLDM OEM shell bridge"
+	depends on SHELL
+	depends on PMCI_PLDM_OEM
+	select SHELL_BACKEND_DUMMY
+	help
+	  Enable an OEM PLDM command set that executes shell commands through
+	  Zephyr shell APIs and returns captured output over MCTP/PLDM.
+	  This is intended for bring-up and debug images.

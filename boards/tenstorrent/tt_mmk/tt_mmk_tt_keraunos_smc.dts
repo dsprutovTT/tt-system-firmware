@@ -1,0 +1,43 @@
+/*
+ * Copyright (c) 2026 Tenstorrent AI ULC
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/dts-v1/;
+
+#include <zephyr/dt-bindings/gpio/gpio.h>
+#include <tenstorrent/tt_grendel_smc.dtsi>
+
+/ {
+	vuarts {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		vuart0: uart_tt_virt@0 {
+			compatible = "tenstorrent,vuart";
+			version = <0x00000000>;
+			reg = <0x0>;
+			status = "okay";
+		};
+	};
+
+	chosen {
+		zephyr,sram = &ram0;
+		zephyr,console = &vuart0;
+		zephyr,shell-uart = &vuart0;
+	};
+};
+
+&i3c1 {
+	status = "okay";
+	input-clock-frequency = <1500000000>;
+	i3c-scl-hz = <1000000>;
+	i2c-scl-hz = <400000>;
+
+	remoteproc: remoteproc@88fc1fe8fa15 {
+		compatible = "tenstorrent,smc-remoteproc";
+		/* No static address, PID of 0x88fc1fe8fa15 */
+		reg = <0x0 0x88fc 0x1fe8fa15>;
+	};
+};

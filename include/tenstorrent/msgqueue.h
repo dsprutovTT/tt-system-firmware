@@ -609,6 +609,10 @@ enum eth_reset_err {
 	ETH_RESET_ERR_CFG_LOOKUP = 6,
 	ETH_RESET_ERR_CFG_SIZE = 7,
 	ETH_RESET_ERR_CFG_LOAD = 8,
+	ETH_RESET_ERR_SERDES_FW_LOOKUP = 9,
+	ETH_RESET_ERR_SERDES_FW_LOAD = 10,
+	ETH_RESET_ERR_SERDES_CFG_LOOKUP = 11,
+	ETH_RESET_ERR_SERDES_CFG_LOAD = 12,
 };
 
 /** @brief Host request to trigger a chip reset
@@ -796,6 +800,45 @@ struct char_throttle_stop_freq_submsg {
 	uint32_t frequency;
 };
 
+/** @brief Submessage for enabling/disabling the GDDR thermal-trip action
+ * @details Payload is a single uint32_t:
+ * - Value == 0: Disable GDDR thermal-trip action
+ * - Value == 1: Enable GDDR thermal-trip action
+ */
+struct char_gddr_therm_trip_enabled_submsg {
+	/** @brief 0 to disable, 1 to enable */
+	uint32_t enabled;
+};
+
+/** @brief Submessage for adding/removing a rail from the DVFS measurement loop
+ * @details Names one rail per message. The DVFS loop samples the enabled rails
+ * round-robin, one rail per 1 ms tick, and publishes the results in the per-rail
+ * telemetry tags (see @ref TAG_SERDES_VDD_VOLTAGE and friends). Rails are disabled at
+ * boot, so nothing is measured until the host asks for it.
+ */
+struct char_rail_measurement_submsg {
+	/** @brief Rail to add or remove, one of @ref char_rail_id */
+	uint8_t rail_id;
+	/** @brief 0 to stop measuring the rail, 1 to start */
+	uint8_t enable;
+	/** @brief Two bytes of padding */
+	uint8_t pad[2];
+};
+
+/** @brief Submessage for setting the periodic telemetry update interval
+ * @details Payload is a single uint32_t with two interpretations:
+ * - Value == 0: Restore the default update interval
+ * - Any other value: Set the update interval to this value in milliseconds, subject to the
+ *   bounds enforced by the handler
+ *
+ * The new interval takes effect on the next expiry of the telemetry timer and is reflected
+ * in the @ref TAG_UPDATE_TELEM_SPEED telemetry tag.
+ */
+struct char_telemetry_interval_submsg {
+	/** @brief 0 to restore the default, or the update interval in ms */
+	uint32_t interval_ms;
+};
+
 /** @brief Union of all possible characterization submessage payloads */
 union characterisation_submsg_data {
 	/** @brief Set host-requested minimum frequency floor */
@@ -804,6 +847,12 @@ union characterisation_submsg_data {
 	struct char_throttle_enabled_submsg throttler_enabled;
 	/** @brief Set frequency limit for stopping kernel throttler */
 	struct char_throttle_stop_freq_submsg throttler_stop_freq;
+	/** @brief Enable/disable GDDR thermal-trip action */
+	struct char_gddr_therm_trip_enabled_submsg gddr_therm_trip_enabled;
+	/** @brief Add/remove a rail from the DVFS measurement loop */
+	struct char_rail_measurement_submsg rail_measurement;
+	/** @brief Set the periodic telemetry update interval */
+	struct char_telemetry_interval_submsg telemetry_interval;
 	/* add to this union to define more sub-message payloads */
 	/** @brief Generic fallback for raw access */
 	uint8_t raw_data[4];

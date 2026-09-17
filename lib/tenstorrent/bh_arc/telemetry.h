@@ -70,8 +70,17 @@ typedef struct {
 	 */
 	uint32_t kernel_nops_at_aiclk_fmin: 1;
 
+	/** @brief GDDR thermal-trip action feature.
+	 *
+	 * When enabled, sustained or critical GDDR over-temperature engages a
+	 * CATMON thermal trip (shutting the ASIC down). This bit is controlled
+	 * at runtime by the host with @ref TT_SMC_MSG_CHARACTERISATION using
+	 * @ref TT_SUB_MSG_SET_GDDR_THERM_TRIP_ENABLED.
+	 */
+	uint32_t gddr_therm_trip: 1;
+
 	/** @brief Reserved for future use. */
-	uint32_t reserved: 31;
+	uint32_t reserved: 30;
 } telemetry_feature_flags_bits_0_t;
 
 /** @brief Packed 32-bit representation of @ref telemetry_feature_flags_bits_0_t. */
@@ -457,6 +466,7 @@ typedef union {
  * Current assignments:
  * - bit 0 (`kernel_nops_at_aiclk_fmin`): firmware supports the
  *   kernel-throttler-at-AICLK-floor feature.
+ * - bit 1 (`gddr_therm_trip`): firmware supports the GDDR thermal-trip action.
  */
 #define TAG_FW_CAPABILITIES_0 78
 
@@ -466,27 +476,138 @@ typedef union {
  *
  * Current assignments:
  * - bit 0 (`kernel_nops_at_aiclk_fmin`): kernel-throttler-at-AICLK-floor is enabled.
+ * - bit 1 (`gddr_therm_trip`): GDDR thermal-trip action is enabled.
  *
  * Runtime control:
- * - The host can enable or disable this bit with @ref TT_SMC_MSG_CHARACTERISATION
+ * - The host can enable or disable bit 0 with @ref TT_SMC_MSG_CHARACTERISATION
  *   and @ref TT_SUB_MSG_SET_KERNEL_THROTTLER_ENABLED.
+ * - The host can enable or disable bit 1 with @ref TT_SMC_MSG_CHARACTERISATION
+ *   and @ref TT_SUB_MSG_SET_GDDR_THERM_TRIP_ENABLED.
  */
 #define TAG_FW_ACTIVE_CONFIG_0 79
+
+/** @brief SerDes VDD rail voltage in mV.
+ *
+ * Sampled by the DVFS loop only while the rail is enabled with
+ * @ref TT_SMC_MSG_CHARACTERISATION and @ref TT_SUB_MSG_SET_RAIL_MEASUREMENT; reads 0
+ * until then, and holds its last value while disabled. Not present on the left chip of
+ * a p300.
+ */
+#define TAG_SERDES_VDD_VOLTAGE 80
+
+/** @brief SerDes VDD rail current in amps, in signed int 16.16 format.
+ *
+ * Sampled under the same conditions as @ref TAG_SERDES_VDD_VOLTAGE.
+ */
+#define TAG_SERDES_VDD_CURRENT 81
+
+/** @brief SerDes VDDL rail voltage in mV.
+ *
+ * Sampled under the same conditions as @ref TAG_SERDES_VDD_VOLTAGE.
+ */
+#define TAG_SERDES_VDDL_VOLTAGE 82
+
+/** @brief SerDes VDDL rail current in amps, in signed int 16.16 format.
+ *
+ * Sampled under the same conditions as @ref TAG_SERDES_VDD_VOLTAGE.
+ */
+#define TAG_SERDES_VDDL_CURRENT 83
+
+/** @brief SerDes VDDH rail voltage in mV.
+ *
+ * Sampled under the same conditions as @ref TAG_SERDES_VDD_VOLTAGE.
+ */
+#define TAG_SERDES_VDDH_VOLTAGE 84
+
+/** @brief SerDes VDDH rail current in amps, in signed int 16.16 format.
+ *
+ * Sampled under the same conditions as @ref TAG_SERDES_VDD_VOLTAGE.
+ */
+#define TAG_SERDES_VDDH_CURRENT 85
+
+/** @brief VCOREM rail voltage in mV.
+ *
+ * Sampled under the same conditions as @ref TAG_SERDES_VDD_VOLTAGE.
+ */
+#define TAG_VCOREM_VOLTAGE 86
+
+/** @brief VCOREM rail current in amps, in signed int 16.16 format.
+ *
+ * Read over the AVS bus. Sampled under the same conditions as
+ * @ref TAG_SERDES_VDD_VOLTAGE.
+ */
+#define TAG_VCOREM_CURRENT 87
+
+/** @brief GDDR VDDR rail voltage in mV.
+ *
+ * Sampled under the same conditions as @ref TAG_SERDES_VDD_VOLTAGE.
+ */
+#define TAG_GDDR_VDDR_VOLTAGE 88
+
+/** @brief GDDR VDDR rail current in amps, in signed int 16.16 format.
+ *
+ * Sampled under the same conditions as @ref TAG_SERDES_VDD_VOLTAGE.
+ */
+#define TAG_GDDR_VDDR_CURRENT 89
+
+/** @brief GDDR VDDA east rail voltage in mV.
+ *
+ * Sampled together with west when @ref TT_CHAR_RAIL_GDDR_VDDA is enabled.
+ */
+#define TAG_GDDR_VDDA_EAST_VOLTAGE 90
+
+/** @brief GDDR VDDA east rail current in amps, in signed int 16.16 format. */
+#define TAG_GDDR_VDDA_EAST_CURRENT 91
+
+/** @brief GDDR VDDA west rail voltage in mV. */
+#define TAG_GDDR_VDDA_WEST_VOLTAGE 92
+
+/** @brief GDDR VDDA west rail current in amps, in signed int 16.16 format. */
+#define TAG_GDDR_VDDA_WEST_CURRENT 93
+
+/** @brief VCOREM rail power in W from MAX20816 READ_POUT, signed int 16.16 format.
+ *
+ * Populated when @ref TT_CHAR_RAIL_VCOREM is enabled and sampled.
+ * Host may still compute V×I from tags 86/87 for comparison.
+ */
+#define TAG_VCOREM_POWER_POUT 94
 
 /** @} */ /* end of telemetry_tag group */
 
 /* Not a real tag, signifies the last tag in the list.
  * MUST be incremented if new tags are defined.
  */
-#define TAG_COUNT 80
+#define TAG_COUNT 95
 
 /* Telemetry tags are at offset `tag` in the telemetry buffer */
 #define TELEM_OFFSET(tag) (tag)
+
+/** @brief Default periodic telemetry update interval in milliseconds. */
+#define TELEM_UPDATE_INTERVAL_DEFAULT_MS 100
+
+/** @brief Shortest accepted telemetry update interval in milliseconds.
+ *
+ * The telemetry pass shares the system work queue with the 1 ms DVFS loop, so the interval is
+ * floored well above 1 ms to keep telemetry from crowding out frequency and voltage control.
+ */
+#define TELEM_UPDATE_INTERVAL_MIN_MS 1
+
+/** @brief Longest accepted telemetry update interval in milliseconds. */
+#define TELEM_UPDATE_INTERVAL_MAX_MS 1000
 
 void init_telemetry(uint32_t app_version);
 uint32_t ConvertFloatToTelemetry(float value);
 float ConvertTelemetryToFloat(int32_t value);
 void StartTelemetryTimer(void);
+
+/** @brief Set the periodic telemetry update interval.
+ * @param interval_ms 0 restores @ref TELEM_UPDATE_INTERVAL_DEFAULT_MS, otherwise the interval in
+ *                    milliseconds, which must be within
+ *                    [@ref TELEM_UPDATE_INTERVAL_MIN_MS, @ref TELEM_UPDATE_INTERVAL_MAX_MS].
+ * @retval 0 on success.
+ * @retval 1 if @p interval_ms is out of range; the interval is left unchanged.
+ */
+uint8_t TelemetrySetUpdateInterval(uint32_t interval_ms);
 void UpdateDmFwVersion(uint32_t bl_version, uint32_t app_version);
 void UpdateTelemetryNocTranslation(bool translation_enabled);
 void UpdateTelemetryBoardPowerLimit(uint32_t power_limit);
@@ -494,6 +615,8 @@ void UpdateTelemetryTdpLimit(uint32_t tdp_limit);
 void UpdateTelemetryThermTripCount(uint16_t therm_trip_count);
 void UpdateTelemetryHostAiclkLimit(uint32_t fmax);
 void UpdateTelemetryKernelThrottler(bool enabled, uint32_t stop_nops_freq);
+/** @brief Update the GDDR thermal-trip active-config bit in @ref TAG_FW_ACTIVE_CONFIG_0. */
+void UpdateTelemetryGddrThermTrip(bool enabled);
 /** @brief Get the current active firmware feature bits from @ref TAG_FW_ACTIVE_CONFIG_0.
  * @ingroup telemetry_feature_capabilities
  *

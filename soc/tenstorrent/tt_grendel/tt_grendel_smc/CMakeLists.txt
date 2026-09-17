@@ -4,4 +4,4 @@ zephyr_include_directories(.)
 
 # Add SOC setup
 zephyr_library()
-zephyr_library_sources(soc.c)
+zephyr_library_sources(soc.c post_code.c)

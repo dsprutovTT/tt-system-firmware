@@ -1,0 +1,6 @@
+/ {
+	pldm_oem_test: pldm-oem-test {
+		compatible = "tenstorrent,pldm-oem-handler";
+		status = "okay";
+	};
+};

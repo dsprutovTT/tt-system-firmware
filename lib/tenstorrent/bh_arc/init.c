@@ -11,7 +11,7 @@
 #include "status_reg.h"
 #include "telemetry.h"
 #include "timer.h"
-
+#include "cm2dm_msg.h"
 #include <stdint.h>
 
 #if defined(HAS_APP_VERSION)
@@ -112,7 +112,7 @@ static int bh_arc_init_end(void)
 	}
 #endif
 
-#ifdef CONFIG_TT_BH_ARC_MSGQUEUE_ENABLED
+#ifdef CONFIG_TT_MSGQUEUE
 	init_msgqueue();
 #endif
 
@@ -136,6 +136,7 @@ static int bh_arc_init_end(void)
 #endif
 	StartGddrThermTripMonitor();
 #endif
+	Dm2CmReadyRequest();
 	return 0;
 }
 SYS_INIT_APP(bh_arc_init_end);

@@ -238,6 +238,14 @@ static int CalculateHarvesting(void)
 			tile_enable.eth_enabled = 0;
 		}
 
+		/* Soft-harvest specific GDDR instances requested via the fw_table.
+		 * A set bit in soft_harvest_dram_mask forces that channel harvested.
+		 */
+		if (tt_bh_fwtable_get_fw_table(fwtable_dev)->has_dram_table) {
+			tile_enable.gddr_enabled &= ~tt_bh_fwtable_get_fw_table(fwtable_dev)
+							     ->dram_table.soft_harvest_dram_mask;
+		}
+
 		uint8_t desired_gddr_count =
 			8 - tt_bh_fwtable_get_fw_table(fwtable_dev)
 				    ->product_spec_harvesting.dram_disable_count;
