@@ -40,6 +40,7 @@ message FwTable {
     uint32 gddr_therm_trip_temp = 18;
     uint32 gddr_therm_trip_critical_temp = 19;
     uint32 gddr_therm_trip_duration_min = 20;
+    uint32 est_board_power_limit = 21;
   }
 
   message FeatureEnable {
@@ -55,6 +56,7 @@ message FwTable {
     bool kernel_throttler_at_floor_en = 10;
     bool gddr_therm_trip_en = 11;
     bool bypass_cable_fault_detection = 12;
+    bool est_board_power_throttler_en = 13;
   }
 
   message FanTable{
