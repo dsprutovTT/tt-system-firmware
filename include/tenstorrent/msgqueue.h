@@ -853,6 +853,17 @@ struct char_telemetry_interval_submsg {
 	uint32_t interval_ms;
 };
 
+/** @brief Submessage for setting the estimated board power throttler limit
+ * @details Payload is a single uint32_t with two interpretations:
+ * - Value == 0: Restore the firmware-table default
+ * - Any other value: Set the limit to this value in watts, subject to the
+ *   range enforced by the handler
+ */
+struct char_est_board_power_limit_submsg {
+	/** @brief 0 to restore the default, or the power limit in watts */
+	uint32_t power_limit;
+};
+
 /** @brief Submessage for adding/removing a rail from the DVFS measurement loop
  * @details Names one rail per message. The DVFS loop samples the enabled rails
  * round-robin, one rail per 1 ms tick, and publishes the results in the per-rail
@@ -880,6 +891,8 @@ union characterisation_submsg_data {
 	struct char_gddr_therm_trip_enabled_submsg gddr_therm_trip_enabled;
 	/** @brief Set the periodic telemetry update interval */
 	struct char_telemetry_interval_submsg telemetry_interval;
+	/** @brief Set the estimated board power throttler limit */
+	struct char_est_board_power_limit_submsg est_board_power_limit;
 	/** @brief Add/remove a rail from the DVFS measurement loop */
 	struct char_rail_measurement_submsg rail_measurement;
 	/* add to this union to define more sub-message payloads */

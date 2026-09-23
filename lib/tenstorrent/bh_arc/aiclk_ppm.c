@@ -549,6 +549,10 @@ static uint8_t characterisation_handler(const union request *request, struct res
 			request->characterisation_msg.submsg_data.telemetry_interval.interval_ms);
 #endif
 
+	case TT_SUB_MSG_SET_EST_BOARD_POWER_LIMIT:
+		return ThrottlerSetEstBoardPowerLimit(request->characterisation_msg.submsg_data
+							      .est_board_power_limit.power_limit);
+
 	case TT_SUB_MSG_SET_RAIL_MEASUREMENT:
 		return RailMeasureSetEnabled(
 			request->characterisation_msg.submsg_data.rail_measurement.rail_id,

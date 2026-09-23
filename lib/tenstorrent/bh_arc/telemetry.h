@@ -494,6 +494,21 @@ typedef union {
  */
 #define TAG_FLASH_JEDEC_ID 80
 
+/**
+ * @brief Estimated board power in watts.
+ *
+ * Sum of vcore power, vcorem power, and GDDR west/east IO rail power.
+ */
+#define TAG_EST_BOARD_POWER 81
+
+/**
+ * @brief Estimated board power throttler limit in watts.
+ *
+ * Reflects the firmware-table default, or the value last set by
+ * @ref TT_SMC_MSG_CHARACTERISATION / @ref TT_SUB_MSG_SET_EST_BOARD_POWER_LIMIT.
+ */
+#define TAG_EST_BOARD_POWER_LIMIT 82
+
 /** @brief SerDes VDD rail voltage in mV.
  *
  * Sampled by the DVFS loop only while the rail is enabled with
@@ -501,91 +516,91 @@ typedef union {
  * until then, and holds its last value while disabled. Not present on the left chip of
  * a p300.
  */
-#define TAG_SERDES_VDD_VOLTAGE 81
+#define TAG_SERDES_VDD_VOLTAGE 83
 
 /** @brief SerDes VDD rail current in amps, in signed int 16.16 format.
  *
  * Sampled under the same conditions as @ref TAG_SERDES_VDD_VOLTAGE.
  */
-#define TAG_SERDES_VDD_CURRENT 82
+#define TAG_SERDES_VDD_CURRENT 84
 
 /** @brief SerDes VDDL rail voltage in mV.
  *
  * Sampled under the same conditions as @ref TAG_SERDES_VDD_VOLTAGE.
  */
-#define TAG_SERDES_VDDL_VOLTAGE 83
+#define TAG_SERDES_VDDL_VOLTAGE 85
 
 /** @brief SerDes VDDL rail current in amps, in signed int 16.16 format.
  *
  * Sampled under the same conditions as @ref TAG_SERDES_VDD_VOLTAGE.
  */
-#define TAG_SERDES_VDDL_CURRENT 84
+#define TAG_SERDES_VDDL_CURRENT 86
 
 /** @brief SerDes VDDH rail voltage in mV.
  *
  * Sampled under the same conditions as @ref TAG_SERDES_VDD_VOLTAGE.
  */
-#define TAG_SERDES_VDDH_VOLTAGE 85
+#define TAG_SERDES_VDDH_VOLTAGE 87
 
 /** @brief SerDes VDDH rail current in amps, in signed int 16.16 format.
  *
  * Sampled under the same conditions as @ref TAG_SERDES_VDD_VOLTAGE.
  */
-#define TAG_SERDES_VDDH_CURRENT 86
+#define TAG_SERDES_VDDH_CURRENT 88
 
 /** @brief VCOREM rail voltage in mV.
  *
  * Sampled under the same conditions as @ref TAG_SERDES_VDD_VOLTAGE.
  */
-#define TAG_VCOREM_VOLTAGE 87
+#define TAG_VCOREM_VOLTAGE 89
 
 /** @brief VCOREM rail current in amps, in signed int 16.16 format.
  *
  * Read over the AVS bus. Sampled under the same conditions as
  * @ref TAG_SERDES_VDD_VOLTAGE.
  */
-#define TAG_VCOREM_CURRENT 88
+#define TAG_VCOREM_CURRENT 90
 
 /** @brief GDDR VDDR rail voltage in mV.
  *
  * Sampled under the same conditions as @ref TAG_SERDES_VDD_VOLTAGE.
  */
-#define TAG_GDDR_VDDR_VOLTAGE 89
+#define TAG_GDDR_VDDR_VOLTAGE 91
 
 /** @brief GDDR VDDR rail current in amps, in signed int 16.16 format.
  *
  * Sampled under the same conditions as @ref TAG_SERDES_VDD_VOLTAGE.
  */
-#define TAG_GDDR_VDDR_CURRENT 90
+#define TAG_GDDR_VDDR_CURRENT 92
 
 /** @brief GDDR VDDA east rail voltage in mV.
  *
  * Sampled together with west when @ref TT_CHAR_RAIL_GDDR_VDDA is enabled.
  */
-#define TAG_GDDR_VDDA_EAST_VOLTAGE 91
+#define TAG_GDDR_VDDA_EAST_VOLTAGE 93
 
 /** @brief GDDR VDDA east rail current in amps, in signed int 16.16 format. */
-#define TAG_GDDR_VDDA_EAST_CURRENT 92
+#define TAG_GDDR_VDDA_EAST_CURRENT 94
 
 /** @brief GDDR VDDA west rail voltage in mV. */
-#define TAG_GDDR_VDDA_WEST_VOLTAGE 93
+#define TAG_GDDR_VDDA_WEST_VOLTAGE 95
 
 /** @brief GDDR VDDA west rail current in amps, in signed int 16.16 format. */
-#define TAG_GDDR_VDDA_WEST_CURRENT 94
+#define TAG_GDDR_VDDA_WEST_CURRENT 96
 
 /** @brief VCOREM rail power in W from MAX20816 READ_POUT, signed int 16.16 format.
  *
  * Populated when @ref TT_CHAR_RAIL_VCOREM is enabled and sampled.
- * Host may still compute V×I from tags 87/88 for comparison.
+ * Host may still compute V×I from tags 89/90 for comparison.
  */
-#define TAG_VCOREM_POWER_POUT 95
+#define TAG_VCOREM_POWER_POUT 97
 
 /** @} */ /* end of telemetry_tag group */
 
 /* Not a real tag, signifies the last tag in the list.
  * MUST be incremented if new tags are defined.
  */
-#define TAG_COUNT 96
+#define TAG_COUNT 98
 
 /* Telemetry tags are at offset `tag` in the telemetry buffer */
 #define TELEM_OFFSET(tag) (tag)
@@ -618,6 +633,7 @@ void UpdateDmFwVersion(uint32_t bl_version, uint32_t app_version);
 void UpdateTelemetryNocTranslation(bool translation_enabled);
 void UpdateTelemetryBoardPowerLimit(uint32_t power_limit);
 void UpdateTelemetryTdpLimit(uint32_t tdp_limit);
+void UpdateTelemetryEstBoardPowerLimit(uint32_t power_limit);
 void UpdateTelemetryThermTripCount(uint16_t therm_trip_count);
 void UpdateTelemetryHostAiclkLimit(uint32_t fmax);
 void UpdateTelemetryKernelThrottler(bool enabled, uint32_t stop_nops_freq);
