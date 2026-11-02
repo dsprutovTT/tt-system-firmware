@@ -44,8 +44,6 @@ float GetVcoreCurrent(void);
 float GetVcorePower(void);
 float GetVcoremPower(void);
 void SwitchVoutControl(enum VoltageCmdSource source);
-float GetSerdesRailVoltage(uint8_t slave_addr); /* returns voltage in mV. */
-float GetSerdesRailCurrent(uint8_t slave_addr); /* returns current in A. */
 float GetGddrWestIoCurrent(void);
 float GetGddrEastIoCurrent(void);
 float GetGddrWestIoPower(void);
