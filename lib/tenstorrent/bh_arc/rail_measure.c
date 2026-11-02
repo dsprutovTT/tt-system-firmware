@@ -18,7 +18,10 @@ LOG_MODULE_REGISTER(rail_measure);
 
 static const struct device *const fwtable_dev = DEVICE_DT_GET(DT_NODELABEL(fwtable));
 
-/* Feedback-divider scalers matching host characterisation (0.85 / 1.8). */
+/* Feedback-divider scalers matching host characterisation (target / 1.8). */
+#define SERDES_VDD_VOUT_SCALER (0.75f / 1.8f)
+#define SERDES_VDDL_VOUT_SCALER (0.75f / 1.8f)
+#define SERDES_VDDH_VOUT_SCALER (1.2f / 1.8f)
 #define GDDR_VDDR_VOUT_SCALER (0.85f / 1.8f)
 #define GDDR_VDDA_VOUT_SCALER (0.85f / 1.8f)
 
@@ -36,26 +39,26 @@ struct rail_sample {
 /* The SerDes VRs are read over PMBus. READ_VOUT/READ_IOUT decoding lives in regulator.c. */
 static bool read_serdes_vdd(struct rail_sample *out)
 {
-	out->voltage_mv = GetSerdesRailVoltage(SERDES_VDD_ADDR);
-	out->current_a = GetSerdesRailCurrent(SERDES_VDD_ADDR);
-	out->dual = false;
-	return true;
+    out->voltage_mv = GetMpsRailVoltageMv(SERDES_VDD_ADDR, SERDES_VDD_VOUT_SCALER);
+    out->current_a = GetMpsRailCurrentA(SERDES_VDD_ADDR);
+    out->dual = false;
+    return true;
 }
 
 static bool read_serdes_vddl(struct rail_sample *out)
 {
-	out->voltage_mv = GetSerdesRailVoltage(SERDES_VDDL_ADDR);
-	out->current_a = GetSerdesRailCurrent(SERDES_VDDL_ADDR);
-	out->dual = false;
-	return true;
+    out->voltage_mv = GetMpsRailVoltageMv(SERDES_VDDL_ADDR, SERDES_VDDL_VOUT_SCALER);
+    out->current_a = GetMpsRailCurrentA(SERDES_VDDL_ADDR);
+    out->dual = false;
+    return true;
 }
 
 static bool read_serdes_vddh(struct rail_sample *out)
 {
-	out->voltage_mv = GetSerdesRailVoltage(SERDES_VDDH_ADDR);
-	out->current_a = GetSerdesRailCurrent(SERDES_VDDH_ADDR);
-	out->dual = false;
-	return true;
+    out->voltage_mv = GetMpsRailVoltageMv(SERDES_VDDH_ADDR, SERDES_VDDH_VOUT_SCALER);
+    out->current_a = GetMpsRailCurrentA(SERDES_VDDH_ADDR);
+    out->dual = false;
+    return true;
 }
 
 /* VCOREM needs no PMBus decoding: the MAX20816 reports VOUT at a flat 0.5 mV/LSB, and the
