@@ -1042,10 +1042,13 @@ ZTEST(msgqueue, test_msg_type_set_telemetry_interval_invalid)
 	zassert_equal(get_telem_interval(), 200);
 
 	/* Out-of-range values are rejected and must leave the running interval untouched. */
+#if TELEM_UPDATE_INTERVAL_MIN_MS > 1
+	/* At a minimum of 1 the only smaller value is 0, which restores the default. */
 	push_set_telem_interval(TELEM_UPDATE_INTERVAL_MIN_MS - 1);
 	push_msg_failure("Interval below the minimum should be rejected");
 	zassert_equal(get_telem_interval(), 200,
 		      "A rejected interval must not change the running interval");
+#endif
 
 	push_set_telem_interval(TELEM_UPDATE_INTERVAL_MAX_MS + 1);
 	push_msg_failure("Interval above the maximum should be rejected");

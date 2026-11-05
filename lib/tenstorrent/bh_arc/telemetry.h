@@ -610,10 +610,11 @@ typedef union {
 
 /** @brief Shortest accepted telemetry update interval in milliseconds.
  *
- * The telemetry pass shares the system work queue with the 1 ms DVFS loop, so the interval is
- * floored well above 1 ms to keep telemetry from crowding out frequency and voltage control.
+ * The telemetry pass shares the system work queue with the 1 ms DVFS loop, so a short interval
+ * eats into the time available for frequency and voltage control. The floor is kept at 1 ms so
+ * that characterization runs can sweep the whole range.
  */
-#define TELEM_UPDATE_INTERVAL_MIN_MS 10
+#define TELEM_UPDATE_INTERVAL_MIN_MS 1
 
 /** @brief Longest accepted telemetry update interval in milliseconds. */
 #define TELEM_UPDATE_INTERVAL_MAX_MS 1000
