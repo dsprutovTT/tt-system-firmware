@@ -43,8 +43,13 @@
 #define READ_IOUT                      0x8C
 #define READ_IOUT_DATA_BYTE_SIZE       2
 #define READ_IOUT_DIRECT_MASK          0x3FFF  /* 14-bit raw IOUT field */
-#define GDDRIO_IOUT_LSB_A              0.0625f /* 62.5 mA per LSB */
+#define MPS_IOUT_LSB_A                 0.0625f /* 62.5 mA per LSB */
 #define GDDR_IO_RAIL_VOLTAGE           1.35f   /* V - fixed IO rail supply */
+#define SERDES_VDDL_RAIL_VOLTAGE       0.75f
+#define SERDES_VDD_RAIL_VOLTAGE        0.75f
+#define SERDES_VDDH_RAIL_VOLTAGE       1.2f
+#define GDDR_VDDR_RAIL_VOLTAGE         0.85f
+#define GDDR_VDDA_RAIL_VOLTAGE         0.85f
 #define READ_POUT                      0x96
 #define READ_POUT_DATA_BYTE_SIZE       2
 #define OPERATION                      0x1
@@ -87,10 +92,10 @@ static float ConvertLinear11ToFloat(uint16_t value)
 	return ldexp(mantissa, exponent);
 }
 
-/* GDDR IO regulators report READ_IOUT as a direct 14-bit value, 62.5 mA/LSB. */
-static float ConvertGddrIoCurrentToFloat(uint16_t value)
+/* MPS regulators report READ_IOUT as a direct 14-bit value, 62.5 mA/LSB. */
+static float ConvertMpsCurrentToFloat(uint16_t value)
 {
-	return (value & READ_IOUT_DIRECT_MASK) * GDDRIO_IOUT_LSB_A;
+	return (value & READ_IOUT_DIRECT_MASK) * MPS_IOUT_LSB_A;
 }
 
 /* The function returns the core current in A. */
@@ -104,49 +109,95 @@ float GetVcoreCurrent(void)
 	return ConvertLinear11ToFloat(iout);
 }
 
-/* The function returns the GDDR west IO rail current in A. */
-float GetGddrWestIoCurrent(void)
+/* The function returns the current in A of the MPS regulator at slave_addr. */
+float GetMpsRailCurrent(uint8_t slave_addr)
 {
-	I2CInit(I2CMst, GDDRIO_WEST_ADDR, I2CFastMode, PMBUS_MST_ID);
+	/* The left chip of a p300 has no SerDes VDD regulator of its own. */
+	if (slave_addr == SERDES_VDD_ADDR &&
+	    tt_bh_fwtable_get_pcb_type(fwtable_dev) == PcbTypeP300 &&
+	    tt_bh_fwtable_is_p300_left_chip()) {
+		return 0.0f;
+	}
+
+	I2CInit(I2CMst, slave_addr, I2CFastMode, PMBUS_MST_ID);
 	uint16_t iout;
 
 	I2CReadBytes(PMBUS_MST_ID, READ_IOUT, PMBUS_CMD_BYTE_SIZE, (uint8_t *)&iout,
 		     READ_IOUT_DATA_BYTE_SIZE, PMBUS_FLIP_BYTES);
-	return ConvertGddrIoCurrentToFloat(iout);
-}
-
-/* The function returns the GDDR east IO rail current in A. */
-float GetGddrEastIoCurrent(void)
-{
-	I2CInit(I2CMst, GDDRIO_EAST_ADDR, I2CFastMode, PMBUS_MST_ID);
-	uint16_t iout;
-
-	I2CReadBytes(PMBUS_MST_ID, READ_IOUT, PMBUS_CMD_BYTE_SIZE, (uint8_t *)&iout,
-		     READ_IOUT_DATA_BYTE_SIZE, PMBUS_FLIP_BYTES);
-	return ConvertGddrIoCurrentToFloat(iout);
+	return ConvertMpsCurrentToFloat(iout);
 }
 
 /* The function returns the GDDR west IO rail power in W. */
 float GetGddrWestIoPower(void)
 {
-	return GetGddrWestIoCurrent() * GDDR_IO_RAIL_VOLTAGE;
+	return GetMpsRailCurrent(GDDRIO_WEST_ADDR) * GDDR_IO_RAIL_VOLTAGE;
 }
 
 /* The function returns the GDDR east IO rail power in W. */
 float GetGddrEastIoPower(void)
 {
-	return GetGddrEastIoCurrent() * GDDR_IO_RAIL_VOLTAGE;
+	return GetMpsRailCurrent(GDDRIO_EAST_ADDR) * GDDR_IO_RAIL_VOLTAGE;
 }
 
-/* The function returns the core power in W. */
-float GetVcorePower(void)
+/* The function returns the SerDes VDDL rail power in W. */
+float GetSerdesVddlPower(void)
 {
-	I2CInit(I2CMst, P0V8_VCORE_ADDR, I2CFastMode, PMBUS_MST_ID);
+	return GetMpsRailCurrent(SERDES_VDDL_ADDR) * SERDES_VDDL_RAIL_VOLTAGE;
+}
+
+/* The function returns the SerDes VDD rail power in W. */
+float GetSerdesVddPower(void)
+{
+	return GetMpsRailCurrent(SERDES_VDD_ADDR) * SERDES_VDD_RAIL_VOLTAGE;
+}
+
+/* The function returns the SerDes VDDH rail power in W. */
+float GetSerdesVddhPower(void)
+{
+	return GetMpsRailCurrent(SERDES_VDDH_ADDR) * SERDES_VDDH_RAIL_VOLTAGE;
+}
+
+/* The function returns the GDDR VDDR rail power in W. */
+float GetGddrVddrPower(void)
+{
+	return GetMpsRailCurrent(GDDR_VDDR_ADDR) * GDDR_VDDR_RAIL_VOLTAGE;
+}
+
+/* The function returns the GDDR VDDA east rail power in W. */
+float GetGddrVddaEastPower(void)
+{
+	return GetMpsRailCurrent(GDDR_VDDA_EAST_ADDR) * GDDR_VDDA_RAIL_VOLTAGE;
+}
+
+/* The function returns the GDDR VDDA west rail power in W. */
+float GetGddrVddaWestPower(void)
+{
+	return GetMpsRailCurrent(GDDR_VDDA_WEST_ADDR) * GDDR_VDDA_RAIL_VOLTAGE;
+}
+
+/* Read the MAX20816 READ_POUT (LINEAR11) and return the output power in W.
+ * MAX20816 is used for Vcore and Vcorem.
+ */
+static float i2c_get_max20816_pout(uint32_t slave_addr)
+{
+	I2CInit(I2CMst, slave_addr, I2CFastMode, PMBUS_MST_ID);
 	uint16_t pout;
 
 	I2CReadBytes(PMBUS_MST_ID, READ_POUT, PMBUS_CMD_BYTE_SIZE, (uint8_t *)&pout,
 		     READ_POUT_DATA_BYTE_SIZE, PMBUS_FLIP_BYTES);
 	return ConvertLinear11ToFloat(pout);
+}
+
+/* The function returns the core power in W. */
+float GetVcorePower(void)
+{
+	return i2c_get_max20816_pout(P0V8_VCORE_ADDR);
+}
+
+/* The function returns the VCOREM rail power in W. */
+float GetVcoremPower(void)
+{
+	return i2c_get_max20816_pout(P0V8_VCOREM_ADDR);
 }
 
 static void set_max20730(uint32_t slave_addr, uint32_t voltage_in_mv, float rfb1, float rfb2)

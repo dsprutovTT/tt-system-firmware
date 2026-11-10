@@ -494,12 +494,60 @@ typedef union {
  */
 #define TAG_FLASH_JEDEC_ID 80
 
+/* Tags 81-85 are left unused so these rail power tags do not collide with tags 81-85 on main. */
+
+/** @brief VCOREM rail power in W from the regulator READ_POUT, in signed int 16.16 format. */
+#define TAG_VCOREM_POWER 86
+
+/**
+ * @brief SerDes VDDL rail power in W, in signed int 16.16 format.
+ *
+ * Derived from the rail current and the fixed SerDes VDDL rail supply.
+ */
+#define TAG_SERDES_VDDL_POWER 87
+
+/**
+ * @brief SerDes VDD rail power in W, in signed int 16.16 format.
+ *
+ * Derived from the rail current and the fixed SerDes VDD rail supply. Reads 0 on the left
+ * chip of a p300, which has no SerDes VDD regulator of its own.
+ */
+#define TAG_SERDES_VDD_POWER 88
+
+/**
+ * @brief SerDes VDDH rail power in W, in signed int 16.16 format.
+ *
+ * Derived from the rail current and the fixed SerDes VDDH rail supply.
+ */
+#define TAG_SERDES_VDDH_POWER 89
+
+/**
+ * @brief GDDR VDDR rail power in W, in signed int 16.16 format.
+ *
+ * Derived from the rail current and the fixed GDDR VDDR rail supply.
+ */
+#define TAG_GDDR_VDDR_POWER 90
+
+/**
+ * @brief GDDR VDDA east rail power in W, in signed int 16.16 format.
+ *
+ * Derived from the rail current and the fixed GDDR VDDA rail supply.
+ */
+#define TAG_GDDR_VDDA_EAST_POWER 91
+
+/**
+ * @brief GDDR VDDA west rail power in W, in signed int 16.16 format.
+ *
+ * Derived from the rail current and the fixed GDDR VDDA rail supply.
+ */
+#define TAG_GDDR_VDDA_WEST_POWER 92
+
 /** @} */ /* end of telemetry_tag group */
 
 /* Not a real tag, signifies the last tag in the list.
  * MUST be incremented if new tags are defined.
  */
-#define TAG_COUNT 81
+#define TAG_COUNT 93
 
 /* Telemetry tags are at offset `tag` in the telemetry buffer */
 #define TELEM_OFFSET(tag) (tag)
@@ -527,8 +575,7 @@ int StartTelemetryTimer(void);
  * @retval 0 on success.
  * @retval 1 if @p interval_ms is below the minimum; the interval is left unchanged.
  */
-uint8_t TelemetrySetUpdateInterval(uint32_t interval_ms);
-void UpdateDmFwVersion(uint32_t bl_version, uint32_t app_version);
+uint8_t TelemetrySetUpdateInterval(uint32_t interval_ms);void UpdateDmFwVersion(uint32_t bl_version, uint32_t app_version);
 void UpdateTelemetryNocTranslation(bool translation_enabled);
 void UpdateTelemetryBoardPowerLimit(uint32_t power_limit);
 void UpdateTelemetryTdpLimit(uint32_t tdp_limit);
